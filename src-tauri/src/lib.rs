@@ -125,12 +125,9 @@ async fn window_action(
                 on_main(&app, move |a| windows::show_main(&a, task_id))?;
                 Ok(Value::Null)
             }
-            "widget" => {
-                on_main(&app, |a| {
-                    if let Some(w) = a.get_webview_window("widget") {
-                        w.show()?;
-                    }
-                    Ok(())
+            "widget" | "hide_widget" => {
+                on_main(&app, move |a| {
+                    windows::set_widget_visible(&a, action == "widget")
                 })?;
                 Ok(Value::Null)
             }
@@ -249,11 +246,7 @@ fn tray(app: &tauri::App) -> Result<()> {
             let result = (|| -> Result<()> {
                 match event.id().as_ref() {
                     "main" => windows::show_main(app, None)?,
-                    "widget" => {
-                        if let Some(w) = app.get_webview_window("widget") {
-                            w.show()?;
-                        }
-                    }
+                    "widget" => windows::set_widget_visible(app, true)?,
                     "mode" => {
                         let state = app.state::<Database>();
                         let mut s = {
@@ -416,9 +409,7 @@ pub fn run() {
                 db::settings(&c)?
             };
             windows::apply_mode(app.handle(), &s.widget_mode)?;
-            if let Some(w) = app.get_webview_window("widget") {
-                w.show()?;
-            }
+            windows::set_widget_visible(app.handle(), true)?;
             if !std::env::args().any(|a| a == "--autostart") {
                 windows::show_main(app.handle(), None)?;
             }
@@ -443,7 +434,9 @@ pub fn run() {
                     }
                 } else {
                     api.prevent_close();
-                    let _ = window.hide();
+                    if let Err(e) = windows::set_widget_visible(window.app_handle(), false) {
+                        let _ = window.emit("app-error", e.to_string());
+                    }
                 }
             }
             tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
@@ -462,6 +455,19 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("DayFlow 启动失败")
         .run(|app, event| {
+            if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
+                // Release Explorer parenting while the event loop and HWND are
+                // still alive, before Tauri's cleanup hides top-level windows.
+                let _ = windows::flush_geometry(app, true);
+                if let Some(w) = app.get_webview_window("widget") {
+                    if let Err(e) = windows::set_widget_visible(app, false) {
+                        eprintln!("退出时隐藏小组件失败：{e}");
+                    }
+                    if let Err(e) = windows::desktop_host::detach(&w) {
+                        eprintln!("退出时解除桌面挂载失败：{e}");
+                    }
+                }
+            }
             if matches!(event, tauri::RunEvent::Exit) {
                 let _ = windows::flush_geometry(app, true);
             }

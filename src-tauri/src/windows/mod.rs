@@ -126,6 +126,19 @@ pub fn show_main(app: &tauri::AppHandle, task_id: Option<String>) -> Result<()> 
     }
     Ok(())
 }
+pub fn set_widget_visible(app: &tauri::AppHandle, visible: bool) -> Result<()> {
+    let w = app
+        .get_webview_window("widget")
+        .ok_or_else(|| anyhow::anyhow!("小组件窗口不存在"))?;
+    if !desktop_host::set_visible(&w, visible)? {
+        if visible {
+            w.show()?;
+        } else {
+            w.hide()?;
+        }
+    }
+    Ok(())
+}
 pub fn apply_mode(app: &tauri::AppHandle, mode: &str) -> Result<desktop_host::ModeStatus> {
     let w = app
         .get_webview_window("widget")

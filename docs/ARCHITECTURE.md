@@ -18,9 +18,11 @@ SQLite 在线 Backup API 用于手动与每日启动备份。恢复流程：只�
 
 ## 原生窗口
 
-`windows/mod.rs`：Tauri 窗口显示、模式、物理位置恢复。恢复时检查当前监视器，修正不可见位置。`desktop_host.rs`：唯一包含 Explorer 特殊实现的模块；检查 DPI 上下文一致后才调用 SetParent，保留并恢复原父级和窗口样式。无输入穿透全屏罩层，也不修改 Explorer 图标窗口。
+`windows/mod.rs`：Tauri 窗口显示、模式、物理位置恢复。恢复时检查当前监视器，修正不可见位置。`desktop_host.rs`：唯一包含 Explorer 特殊实现的模块；查找包含 `SHELLDLL_DefView` 的父窗口作为宿主，检查 DPI 上下文一致后才调用 SetParent，将小组件设为该宿主中位于图标视图之上的子窗口，并保留屏幕位置。宿主不是图标层后方的壁纸 WorkerW。无输入穿透全屏罩层，也不修改 Explorer 图标窗口。
 
-桌面适配目前依赖 Explorer 非公开的 WorkerW 行为，不能承诺所有 Windows 版本可用。兼容模式是正式可用行为；真实挂载的恢复和混合 DPI 验收另见 TESTING.md。
+挂载期间通过原生 API 显示或隐藏小组件，保留子窗口样式；解除挂载时恢复原父级、窗口样式和屏幕位置，保留当前可见状态，再同步 Tauri 的显示状态。退出前先隐藏小组件，再解除挂载。
+
+桌面适配依赖 Explorer 非公开的宿主结构，不能承诺所有 Windows 版本可用。兼容模式是正式可用行为；真实挂载的系统版本、恢复和混合 DPI 验收另见 TESTING.md。
 
 ## 前端
 

@@ -2,6 +2,17 @@
 
 本文件随实际验证更新，未执行的项目不能标为通过。
 
+## V1.0.1 桌面小组件修复（2026-10-17）
+
+- 用户在 Windows 10 安装版反馈：主窗口和托盘正常，小组件位于桌面图标之下，无法点击或拖动；通过托盘或应用内退出后仍看到残留。旧版代码选择了图标宿主后方的壁纸 WorkerW，且启动、隐藏、恢复和退出时的 Tauri 窗口样式重建会丢掉外部设置的 `WS_CHILD`。未在用户设备上直接观察进程和窗口句柄，退出后残留是活窗口还是绘制残影尚未确认。
+- 已改为挂到包含 `SHELLDLL_DefView` 的父宿主，将小组件置于图标视图之上；移除创建壁纸 WorkerW 的消息。挂载时用原生接口显示/隐藏，解除后保留当前可见状态并同步框架，退出前先隐藏并解除挂载。
+- `npm test` 6/6 通过。沙箱临时目录最初报 EPERM，本次将测试进程的 TEMP/TMP 指向 `.tools/test-temp` 后通过，未改动测试或应用逻辑。
+- `npm run test:rust` 17/17 通过，其中 3 项新增原生回归使用自身创建的隐藏 Win32 窗口，覆盖宿主发现、图标同级 Z 序、挂载/解除前后的屏幕坐标、样式与当前可见位。测试不操作 Explorer，也不等同于 Win10 实机通过。
+- `npm run check:rust`、严格 TypeScript/Vite 构建、Rust 格式检查与差异空白检查通过。`node scripts/tauri.mjs build --debug --no-bundle` 成功。
+- 发布 Rust 优化构建通过。隔离环境中的 NSIS 工具启动报 DLL 重定位错误 623，在正常 Windows 环境重新执行 `node scripts/tauri.mjs build` 后完整构建和 NSIS 打包成功。输出 `src-tauri/target/release/bundle/nsis/DayFlow_1.0.1_x64-setup.exe`，2,045,079 字节；SHA256：`6447d5b623de0fe9d63baa1bcc25560f670a10746d68d2829508d7e4cd8cd9b5`。发布 EXE 的 PE 产品版本为 `1.0.1`；本轮未安装该安装包。
+- 使用 `.tools/widget-1.0.1-test` 独立数据库启动调试版，实际加载本地嵌入资源，主窗口可访问性树显示 `V1.0.1`。后续界面操作分别收到 `window bounds changed`、`user input was detected in this window`，未完成交互验收；已仅关闭本轮启动的调试进程，测试数据保留。
+- **Win10 待复测**：小组件与桌面图标重叠时可点击、输入中文、拖动和缩放；点击桌面图标后层级稳定；隐藏后从主窗口/托盘恢复；桌面与置顶双向切换保持位置、尺寸及可见性；从托盘和应用内分别真正退出后无小组件残留且进程结束；重新启动后模式和位置恢复。多显示器、混合 DPI、Explorer 重启仍未验收。
+
 ## V1.0.0 发布与覆盖升级（2026-10-17）
 
 - npm、Cargo、Tauri 发布版本及锁文件统一为 `1.0.0`。主窗口侧栏和设置页显示 `V1.0.0`，共同读取 `tauri.conf.json` 的构建版本。

@@ -120,7 +120,7 @@ export function WidgetView() {
           aria-label="隐藏小组件"
           title="隐藏（可从托盘恢复）"
           onClick={() => {
-            if (native) void getCurrentWindow().hide();
+            void run(() => windowAction("hide_widget"));
           }}
         >
           <Minus size={14} />
