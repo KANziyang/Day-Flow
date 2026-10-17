@@ -1,9 +1,40 @@
-import type { Report } from "../types";
+import type { Report, Task, WorkRecord } from "../types";
+
+function recordLine(record: WorkRecord) {
+  const label = record.source === "task_completion"
+    ? "任务完成"
+    : record.kind === "completed" ? "手动完成" : "工作进展";
+  const reopened = record.source === "task_completion" && record.reopened_at_utc
+    ? "（之后重新开启过）" : "";
+  return `${record.local_date} · ${label}：${record.content}${reopened}`;
+}
+
+function taskLine(task: Task) {
+  const due = task.due_date_local
+    ? `截止：${task.due_date_local}${task.due_time_local ? " " + task.due_time_local : ""}`
+    : "无截止日期";
+  return `${task.title}（${due}）`;
+}
+
 export function reportText(r: Report) {
   const kind = { day: "每日", week: "每周", month: "每月" }[r.kind] ?? "";
+  const nextKind = { day: "明天", week: "下周", month: "下月" }[r.kind] ?? "";
   const lines = (values: string[]) =>
     values.length
       ? values.map((v, i) => `${i + 1}. ${v}`).join("\n")
       : "暂无记录";
-  return `DayFlow ${kind}总结\n\n日期：${r.start}${r.start === r.end ? "" : " 至 " + r.end}\n\n一、任务统计\n新增任务：${r.created}\n完成任务：${r.completed}\n完成事件：${r.completion_events}\n期末进行中的任务：${r.in_progress}\n工作日志：${r.logs.length}\n\n二、实际完成事项\n${lines(r.completions.map((e) => e.task_title_snapshot))}\n\n三、工作进展\n${lines(r.logs.map((l) => `${l.local_date}：${l.content}`))}\n\n四、待继续推进的任务（期末状态）\n${lines(r.unfinished.map((t) => t.title))}${r.kind === "week" ? "\n\n五、下周即将到期\n" + lines(r.upcoming.map((t) => `${t.title}（${t.due_date_local}）`)) : ""}${r.kind === "month" ? "\n\n五、已完成任务分类\n" + lines(r.categories.map(([name, count]) => `${name}：${count}`)) : ""}`;
+  const completed = r.work_records.filter((record) =>
+    record.source === "task_completion" || record.kind === "completed");
+  const progress = r.work_records.filter((record) =>
+    record.source === "manual" && record.kind === "progress");
+  const sections = [
+    `DayFlow ${kind}总结`,
+    `日期：${r.start}${r.start === r.end ? "" : " 至 " + r.end}`,
+    "一、实际完成事项\n" + lines(completed.map(recordLine)),
+    "二、工作进展\n" + lines(progress.map(recordLine)),
+    `三、下一周期需要完成的任务（${nextKind}：${r.next_start} 至 ${r.next_end}）\n` +
+      lines(r.upcoming.map(taskLine)),
+    "四、未完成的任务\n" + lines(r.unfinished.map(taskLine)),
+  ];
+  return sections.join("\n\n");
 }

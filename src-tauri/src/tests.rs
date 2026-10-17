@@ -34,6 +34,31 @@ fn with_db(f: impl FnOnce(&Database)) {
     f(&db);
 }
 
+fn completion_title(report: &reports::Report) -> &str {
+    report
+        .work_records
+        .iter()
+        .find_map(|record| match record {
+            WorkRecord::TaskCompletion { content, .. } => Some(content.as_str()),
+            WorkRecord::Manual { .. } => None,
+        })
+        .unwrap()
+}
+fn completion_count(report: &reports::Report) -> usize {
+    report
+        .work_records
+        .iter()
+        .filter(|record| matches!(record, WorkRecord::TaskCompletion { .. }))
+        .count()
+}
+fn manual_count(report: &reports::Report, kind: &str) -> usize {
+    report
+        .work_records
+        .iter()
+        .filter(|record| matches!(record, WorkRecord::Manual { log } if log.kind == kind))
+        .count()
+}
+
 #[test]
 fn task_lifecycle_and_history() {
     with_db(|db| {
@@ -123,6 +148,7 @@ fn independent_and_historical_logs() {
             &c,
             LogInput {
                 id: None,
+                kind: "progress".into(),
                 task_id: None,
                 local_date: "2024-02-29".into(),
                 content: "帮助同事排查异常".into(),
@@ -133,6 +159,7 @@ fn independent_and_historical_logs() {
         assert_eq!(l.local_date, "2024-02-29");
         let mut i = LogInput {
             id: Some(l.id.clone()),
+            kind: "progress".into(),
             task_id: None,
             local_date: "2024-02-28".into(),
             content: "修改历史日志".into(),
@@ -190,12 +217,11 @@ fn report_uses_completion_snapshots_after_reopen_rename_delete() {
         repo::save_task(&mut c, i).unwrap();
         repo::delete_task(&mut c, &t.id, false).unwrap();
         let r = reports::generate(&c, "day", "2024-02-29").unwrap();
-        assert_eq!(r.created, 1);
-        assert_eq!(r.completed, 1);
-        assert_eq!(r.completions[0].task_title_snapshot, "历史标题");
+        assert_eq!(completion_count(&r), 1);
+        assert_eq!(completion_title(&r), "历史标题");
         assert!(r.unfinished.is_empty());
         let empty = reports::generate(&c, "day", "2024-03-01").unwrap();
-        assert_eq!(empty.completed, 0);
+        assert!(empty.work_records.is_empty());
     });
 }
 #[test]
@@ -217,6 +243,7 @@ fn report_current_and_previous_day_progress_logs_and_unique_completions() {
             &c,
             LogInput {
                 id: None,
+                kind: "progress".into(),
                 task_id: Some(pending.id.clone()),
                 local_date: date.to_string(),
                 content: "完成接口联调".into(),
@@ -225,16 +252,21 @@ fn report_current_and_previous_day_progress_logs_and_unique_completions() {
         )
         .unwrap();
         let r = reports::generate(&c, "day", &date.to_string()).unwrap();
-        assert_eq!(r.created, 2);
-        assert_eq!(r.completed, 1);
-        assert_eq!(r.completion_events, 2);
-        assert_eq!(r.in_progress, 1);
-        assert_eq!(r.logs.len(), 1);
+        assert_eq!(completion_count(&r), 1);
+        assert_eq!(manual_count(&r, "progress"), 1);
+        assert_eq!(
+            repo::all_events(&c)
+                .unwrap()
+                .iter()
+                .filter(|event| { event.task_id == t.id && event.event_type == "completed" })
+                .count(),
+            2
+        );
+        assert_eq!(r.unfinished.len(), 1);
+        assert_eq!(r.unfinished[0].status, "in_progress");
         assert_eq!(r.unfinished[0].title, "进行中");
         assert_eq!(
-            reports::generate(&c, "day", &yesterday.to_string())
-                .unwrap()
-                .completed,
+            completion_count(&reports::generate(&c, "day", &yesterday.to_string()).unwrap()),
             1
         );
     });
@@ -245,10 +277,9 @@ fn empty_reports_have_no_invented_data() {
         let c = db.lock().unwrap();
         for kind in ["day", "week", "month"] {
             let r = reports::generate(&c, kind, "2026-10-17").unwrap();
-            assert_eq!(r.completed, 0);
-            assert_eq!(r.created, 0);
-            assert!(r.logs.is_empty());
+            assert!(r.work_records.is_empty());
             assert!(r.unfinished.is_empty());
+            assert!(r.upcoming.is_empty());
         }
     });
 }
@@ -291,7 +322,6 @@ fn categories_and_settings_validate_and_persist() {
         assert!(repo::save_category(&c, None, "自定义", "#abcd12").is_err());
         assert!(repo::save_category(&c, None, "非法", "red").is_err());
         let mut s = Settings::default();
-        s.widget_mode = "topmost".into();
         s.widget_count = 8;
         crate::db::save_settings(&c, &s).unwrap();
         assert_eq!(crate::db::settings(&c).unwrap().widget_count, 8);
@@ -341,6 +371,7 @@ fn cross_month_upcoming_and_historical_category_snapshot() {
             &c,
             LogInput {
                 id: None,
+                kind: "progress".into(),
                 task_id: Some(t.id.clone()),
                 local_date: "2024-02-29".into(),
                 content: "二月进展".into(),
@@ -350,7 +381,7 @@ fn cross_month_upcoming_and_historical_category_snapshot() {
         .unwrap();
         let r = reports::generate(&c, "week", "2024-02-29").unwrap();
         assert_eq!(r.upcoming.len(), 1);
-        assert_eq!(r.logs.len(), 1);
+        assert_eq!(manual_count(&r, "progress"), 1);
         assert_eq!(r.unfinished.len(), 1);
         repo::set_status(&mut c, &t.id, "completed").unwrap();
         c.execute(
@@ -363,8 +394,14 @@ fn cross_month_upcoming_and_historical_category_snapshot() {
         .unwrap();
         repo::save_category(&c, Some("work".into()), "改名后的工作", "#abcdef").unwrap();
         let r = reports::generate(&c, "month", "2024-02-29").unwrap();
-        assert_eq!(r.categories, vec![("工作".into(), 1)]);
-        assert_eq!(r.completed, 1);
+        assert_eq!(completion_count(&r), 1);
+        let completion = repo::all_events(&c)
+            .unwrap()
+            .into_iter()
+            .find(|event| event.event_type == "completed")
+            .unwrap();
+        let snapshot: serde_json::Value = serde_json::from_str(&completion.snapshot_json).unwrap();
+        assert_eq!(snapshot["category_name_snapshot"], "工作");
     });
 }
 
@@ -385,6 +422,7 @@ fn complete_business_loop_survives_restart() {
             &c,
             LogInput {
                 id: None,
+                kind: "completed".into(),
                 task_id: None,
                 local_date: date.clone(),
                 content: "今天帮助同事定位并解决了一个程序异常。".into(),
@@ -393,16 +431,16 @@ fn complete_business_loop_survives_restart() {
         )
         .unwrap();
         let mut s = Settings::default();
-        s.widget_mode = "topmost".into();
+        s.widget_count = 8;
         crate::db::save_settings(&c, &s).unwrap();
     }
     let db = Database::open(dir.path()).unwrap();
     let c = db.lock().unwrap();
     let r = reports::generate(&c, "day", &date).unwrap();
-    assert_eq!(r.completed, 1);
-    assert_eq!(r.logs.len(), 1);
-    assert_eq!(r.completions[0].task_title_snapshot, "完成项目代码优化");
-    assert_eq!(crate::db::settings(&c).unwrap().widget_mode, "topmost");
+    assert_eq!(completion_count(&r), 1);
+    assert_eq!(manual_count(&r, "completed"), 1);
+    assert_eq!(completion_title(&r), "完成项目代码优化");
+    assert_eq!(crate::db::settings(&c).unwrap().widget_count, 8);
 }
 
 #[test]

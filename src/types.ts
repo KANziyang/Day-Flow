@@ -34,12 +34,25 @@ export interface Category {
 }
 export interface WorkLog {
   id: string;
+  kind: "completed" | "progress";
   task_id: string | null;
   local_date: string;
   content: string;
   created_at_utc: string;
   updated_at_utc: string;
 }
+export type WorkRecord =
+  | {
+      source: "task_completion";
+      id: string;
+      event_id: string;
+      task_id: string;
+      local_date: string;
+      content: string;
+      created_at_utc: string;
+      reopened_at_utc: string | null;
+    }
+  | ({ source: "manual" } & WorkLog);
 export interface TaskEvent {
   id: string;
   task_id: string;
@@ -51,7 +64,6 @@ export interface TaskEvent {
   created_at_utc: string;
 }
 export interface Settings {
-  widget_mode: "desktop" | "topmost";
   widget_count: 3 | 5 | 8;
   widget_opacity: number;
   remember_position: boolean;
@@ -68,31 +80,19 @@ export interface Settings {
 export interface Snapshot {
   tasks: Task[];
   categories: Category[];
-  logs: WorkLog[];
+  work_records: WorkRecord[];
   settings: Settings;
   data_dir: string;
-  completion_events: [string, string][];
-}
-export interface ModeStatus {
-  mode: string;
-  embedded: boolean;
-  message: string;
 }
 export interface Report {
   kind: string;
   start: string;
   end: string;
-  created: number;
-  completed: number;
-  completion_events: number;
-  in_progress: number;
-  completions: TaskEvent[];
-  logs: WorkLog[];
+  next_start: string;
+  next_end: string;
+  work_records: WorkRecord[];
   unfinished: Task[];
   upcoming: Task[];
-  daily: [string, number][];
-  weekly: [string, number][];
-  categories: [string, number][];
 }
 export const statusLabels: Record<Status, string> = {
   todo: "待办",

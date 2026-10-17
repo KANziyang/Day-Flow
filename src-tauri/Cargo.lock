@@ -687,7 +687,7 @@ dependencies = [
 
 [[package]]
 name = "dayflow"
-version = "1.0.0"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -703,7 +703,6 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tempfile",
  "uuid",
- "windows-sys 0.61.2",
 ]
 
 [[package]]

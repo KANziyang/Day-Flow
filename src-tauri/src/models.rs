@@ -40,6 +40,7 @@ pub struct Category {
 pub struct WorkLog {
     pub id: String,
     pub task_id: Option<String>,
+    pub kind: String,
     pub local_date: String,
     pub content: String,
     pub created_at_utc: String,
@@ -49,9 +50,47 @@ pub struct WorkLog {
 pub struct LogInput {
     pub id: Option<String>,
     pub task_id: Option<String>,
+    pub kind: String,
     pub local_date: String,
     pub content: String,
     pub expected_updated_at: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "source", rename_all = "snake_case")]
+pub enum WorkRecord {
+    TaskCompletion {
+        id: String,
+        event_id: String,
+        task_id: String,
+        local_date: String,
+        content: String,
+        created_at_utc: String,
+        reopened_at_utc: Option<String>,
+    },
+    Manual {
+        #[serde(flatten)]
+        log: WorkLog,
+    },
+}
+impl WorkRecord {
+    pub fn id(&self) -> &str {
+        match self {
+            Self::TaskCompletion { id, .. } => id,
+            Self::Manual { log } => &log.id,
+        }
+    }
+    pub fn local_date(&self) -> &str {
+        match self {
+            Self::TaskCompletion { local_date, .. } => local_date,
+            Self::Manual { log } => &log.local_date,
+        }
+    }
+    pub fn created_at_utc(&self) -> &str {
+        match self {
+            Self::TaskCompletion { created_at_utc, .. } => created_at_utc,
+            Self::Manual { log } => &log.created_at_utc,
+        }
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskEvent {
@@ -67,7 +106,6 @@ pub struct TaskEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    pub widget_mode: String,
     pub widget_count: usize,
     pub widget_opacity: f64,
     pub remember_position: bool,
@@ -84,7 +122,6 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            widget_mode: "desktop".into(),
             widget_count: 5,
             widget_opacity: 1.0,
             remember_position: true,
@@ -104,10 +141,9 @@ impl Default for Settings {
 pub struct Snapshot {
     pub tasks: Vec<Task>,
     pub categories: Vec<Category>,
-    pub logs: Vec<WorkLog>,
+    pub work_records: Vec<WorkRecord>,
     pub settings: Settings,
     pub data_dir: String,
-    pub completion_events: Vec<(String, String)>,
 }
 
 pub fn now() -> String {

@@ -23,6 +23,8 @@ export function ReportsView() {
     let alive = true;
     setLoading(true);
     setError("");
+    setReport(null);
+    setCopied(false);
     if (!date) {
       setLoading(false);
       return;
@@ -55,12 +57,7 @@ export function ReportsView() {
     } else d.setDate(d.getDate() + n * (kind === "week" ? 7 : 1));
     setDate(localDate(d));
   };
-  const points = report
-      ? kind === "month"
-        ? report.weekly
-        : report.daily
-      : [],
-    max = Math.max(1, ...points.map((p) => p[1]));
+  const text = report ? reportText(report) : "";
   return (
     <div className="view-scroll">
       <div className="page-heading">
@@ -91,6 +88,7 @@ export function ReportsView() {
           <button
             className="icon-button"
             aria-label="上一周期"
+            disabled={!date}
             onClick={() => step(-1)}
           >
             <ChevronLeft size={17} />
@@ -106,6 +104,7 @@ export function ReportsView() {
           <button
             className="icon-button"
             aria-label="下一周期"
+            disabled={!date}
             onClick={() => step(1)}
           >
             <ChevronRight size={17} />
@@ -123,50 +122,6 @@ export function ReportsView() {
         </div>
       ) : (
         report && (
-          <>
-            <div className="stats-grid">
-              <div>
-                <span>新增任务</span>
-                <strong>{report.created}</strong>
-              </div>
-              <div>
-                <span>实际完成任务</span>
-                <strong>{report.completed}</strong>
-              </div>
-              <div>
-                <span>工作记录</span>
-                <strong>{report.logs.length}</strong>
-              </div>
-              <div>
-                <span>期末进行中</span>
-                <strong>{report.in_progress}</strong>
-              </div>
-            </div>
-            {kind !== "day" && (
-              <section className="surface trend">
-                <div className="section-heading">
-                  <h2>{kind === "month" ? "每周完成趋势" : "每日完成任务"}</h2>
-                  <span>
-                    {report.start} — {report.end}
-                  </span>
-                </div>
-                <div className="bar-chart">
-                  {points.map(([d, count]) => (
-                    <div
-                      className="chart-column"
-                      key={d}
-                      title={`${d}：${count} 个任务`}
-                    >
-                      <span>{count}</span>
-                      <div className="bar-track">
-                        <div style={{ height: `${(count / max) * 100}%` }} />
-                      </div>
-                      <small>{d.slice(5)}</small>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
             <section className="surface report-paper">
               <div className="section-heading">
                 <h2>
@@ -178,7 +133,7 @@ export function ReportsView() {
                   className="secondary"
                   onClick={() => {
                     void navigator.clipboard
-                      .writeText(reportText(report))
+                      .writeText(text)
                       .then(() => setCopied(true))
                       .catch((e) => setError("复制失败：" + errorText(e)));
                   }}
@@ -187,19 +142,8 @@ export function ReportsView() {
                   {copied ? "已复制" : "复制总结"}
                 </button>
               </div>
-              {report.created === 0 &&
-                report.completed === 0 &&
-                report.logs.length === 0 && (
-                  <div className="report-empty">
-                    这个周期还没有新增任务、完成事项或工作日志。
-                  </div>
-                )}
-              <pre>{reportText(report)}</pre>
-              <p className="footnote">
-                完成任务按周期内任务去重；完成事件保留每一次完成。进行中与待推进事项依据周期末的历史状态。月报分类统计周期内完成的任务，趋势按每天完成任务数汇总。
-              </p>
+              <pre>{text}</pre>
             </section>
-          </>
         )
       )}
     </div>

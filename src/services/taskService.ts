@@ -54,11 +54,7 @@ export function dueLabel(t: Task, now = new Date()) {
 }
 export function isTodayTask(t: Task, now = new Date()) {
   return (
-    !t.deleted_at_utc &&
-    ((isActive(t) &&
-      (isOverdue(t, now) || t.due_date_local === localDate(now))) ||
-      (t.status === "completed" &&
-        !!t.completed_at_utc &&
-        localDate(new Date(t.completed_at_utc)) === localDate(now)))
+    isActive(t) &&
+    (isOverdue(t, now) || t.due_date_local === localDate(now))
   );
 }

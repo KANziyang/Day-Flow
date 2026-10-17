@@ -5,6 +5,8 @@ mod repository;
 #[cfg(test)]
 mod tests;
 mod windows;
+#[cfg(test)]
+mod work_record_tests;
 
 use anyhow::{bail, Result};
 use db::Database;
@@ -75,7 +77,7 @@ async fn dispatch(
             "save_settings" => {
                 let mut value = serde_json::to_value(db::settings(&c)?)?;
                 let key = field(&payload, "key")?;
-                if key == "widget_mode" || value.get(key).is_none() {
+                if value.get(key).is_none() {
                     bail!("设置项无效");
                 }
                 value[key] = payload
@@ -125,37 +127,11 @@ async fn window_action(
                 on_main(&app, move |a| windows::show_main(&a, task_id))?;
                 Ok(Value::Null)
             }
-            "widget" => {
-                on_main(&app, |a| {
-                    if let Some(w) = a.get_webview_window("widget") {
-                        w.show()?;
-                    }
-                    Ok(())
+            "widget" | "hide_widget" => {
+                on_main(&app, move |a| {
+                    windows::set_widget_visible(&a, action == "widget")
                 })?;
                 Ok(Value::Null)
-            }
-            "desktop" | "topmost" => {
-                let mode = action;
-                let result = on_main(&app, move |a| {
-                    let status = windows::apply_mode(&a, &mode)?;
-                    let state = a.state::<Database>();
-                    let c = state.lock()?;
-                    let mut s = db::settings(&c)?;
-                    s.widget_mode = mode;
-                    db::save_settings(&c, &s)?;
-                    a.emit("data-changed", ())?;
-                    Ok(status)
-                })?;
-                Ok(serde_json::to_value(result)?)
-            }
-            "mode_status" => {
-                let s = app
-                    .state::<RuntimeStatus>()
-                    .0
-                    .lock()
-                    .map_err(|_| anyhow::anyhow!("窗口状态异常"))?
-                    .clone();
-                Ok(serde_json::to_value(s)?)
             }
             "quit" => {
                 app.exit(0);
@@ -166,8 +142,6 @@ async fn window_action(
     })();
     result.map_err(|e| e.to_string())
 }
-pub struct RuntimeStatus(pub std::sync::Mutex<windows::desktop_host::ModeStatus>);
-
 #[tauri::command]
 async fn data_action(app: tauri::AppHandle, action: String) -> std::result::Result<String, String> {
     let result = (|| -> Result<String> {
@@ -198,10 +172,6 @@ async fn data_action(app: tauri::AppHandle, action: String) -> std::result::Resu
                 }
                 let safety = state.restore(&path)?;
                 app.emit("data-changed", ())?;
-                let settings = db::settings(&*state.lock()?)?;
-                on_main(&app, move |a| {
-                    windows::apply_mode(&a, &settings.widget_mode)
-                })?;
                 Ok(format!("恢复完成；原数据备份：{}", safety.display()))
             }
             _ => bail!("未知数据操作"),
@@ -233,9 +203,8 @@ fn tray(app: &tauri::App) -> Result<()> {
     };
     let main = MenuItem::with_id(app, "main", "打开 DayFlow", true, None::<&str>)?;
     let widget = MenuItem::with_id(app, "widget", "显示小组件", true, None::<&str>)?;
-    let mode = MenuItem::with_id(app, "mode", "切换桌面 / 置顶", true, None::<&str>)?;
     let exit = MenuItem::with_id(app, "exit", "退出 DayFlow", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&main, &widget, &mode, &exit])?;
+    let menu = Menu::with_items(app, &[&main, &widget, &exit])?;
     TrayIconBuilder::new()
         .icon(
             app.default_window_icon()
@@ -249,27 +218,7 @@ fn tray(app: &tauri::App) -> Result<()> {
             let result = (|| -> Result<()> {
                 match event.id().as_ref() {
                     "main" => windows::show_main(app, None)?,
-                    "widget" => {
-                        if let Some(w) = app.get_webview_window("widget") {
-                            w.show()?;
-                        }
-                    }
-                    "mode" => {
-                        let state = app.state::<Database>();
-                        let mut s = {
-                            let c = state.lock()?;
-                            db::settings(&c)?
-                        };
-                        s.widget_mode = if s.widget_mode == "topmost" {
-                            "desktop"
-                        } else {
-                            "topmost"
-                        }
-                        .into();
-                        windows::apply_mode(app, &s.widget_mode)?;
-                        db::save_settings(&*state.lock()?, &s)?;
-                        app.emit("data-changed", ())?;
-                    }
+                    "widget" => windows::set_widget_visible(app, true)?,
                     "exit" => app.exit(0),
                     _ => {}
                 }
@@ -295,12 +244,6 @@ fn background(app: tauri::AppHandle) {
                 continue;
             }
             last_check = std::time::Instant::now();
-            if windows::desktop_host::host_lost() {
-                let a = app.clone();
-                let _ = app.run_on_main_thread(move || {
-                    let _ = windows::apply_mode(&a, "desktop");
-                });
-            }
             let result = (|| -> Result<()> {
                 use tauri_plugin_notification::NotificationExt;
                 let state = app.state::<Database>();
@@ -374,13 +317,6 @@ pub fn run() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
-        .manage(RuntimeStatus(std::sync::Mutex::new(
-            windows::desktop_host::ModeStatus {
-                mode: "desktop".into(),
-                embedded: false,
-                message: "桌面兼容模式 · 初始化中".into(),
-            },
-        )))
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             #[cfg(debug_assertions)]
@@ -409,16 +345,10 @@ pub fn run() {
             app.manage(database);
             tray(app)?;
             windows::restore_geometry(app.handle(), "main")?;
+            windows::set_widget_visible(app.handle(), true)?;
+            // The frameless window's shadow bounds settle when shown. Restore
+            // its client size afterwards so a hidden caption is not counted.
             windows::restore_geometry(app.handle(), "widget")?;
-            let s = {
-                let state = app.state::<Database>();
-                let c = state.lock()?;
-                db::settings(&c)?
-            };
-            windows::apply_mode(app.handle(), &s.widget_mode)?;
-            if let Some(w) = app.get_webview_window("widget") {
-                w.show()?;
-            }
             if !std::env::args().any(|a| a == "--autostart") {
                 windows::show_main(app.handle(), None)?;
             }
@@ -443,7 +373,9 @@ pub fn run() {
                     }
                 } else {
                     api.prevent_close();
-                    let _ = window.hide();
+                    if let Err(e) = windows::set_widget_visible(window.app_handle(), false) {
+                        let _ = window.emit("app-error", e.to_string());
+                    }
                 }
             }
             tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
@@ -462,6 +394,9 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("DayFlow 启动失败")
         .run(|app, event| {
+            if matches!(event, tauri::RunEvent::ExitRequested { .. }) {
+                let _ = windows::flush_geometry(app, true);
+            }
             if matches!(event, tauri::RunEvent::Exit) {
                 let _ = windows::flush_geometry(app, true);
             }
