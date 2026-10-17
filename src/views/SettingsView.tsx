@@ -7,8 +7,6 @@ import {
   RotateCcw,
   Plus,
   Save,
-  Monitor,
-  Pin,
 } from "lucide-react";
 import { useData } from "../hooks/useData";
 import { APP_VERSION_LABEL } from "../services/appInfo";
@@ -22,7 +20,6 @@ import {
 import {
   priorityLabels,
   type Category,
-  type ModeStatus,
   type Priority,
   type Settings,
 } from "../types";
@@ -56,12 +53,11 @@ function Toggle({
   );
 }
 export function SettingsView() {
-  const { data, run, reportError } = useData(),
+  const { data, run } = useData(),
     s = data!.settings;
   const [busy, setBusy] = useState(false),
     [auto, setAuto] = useState<boolean | null>(null),
-    [autoError, setAutoError] = useState(""),
-    [mode, setMode] = useState<ModeStatus | null>(null);
+    [autoError, setAutoError] = useState("");
   useEffect(() => {
     let alive = true;
     void autostart()
@@ -71,15 +67,10 @@ export function SettingsView() {
       .catch((e) => {
         if (alive) setAutoError(errorText(e));
       });
-    void windowAction("mode_status")
-      .then((v) => {
-        if (alive) setMode(v);
-      })
-      .catch((error) => { if (alive) reportError(error); });
     return () => {
       alive = false;
     };
-  }, [s.widget_mode, reportError]);
+  }, []);
   const save = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     if (busy) return;
     setBusy(true);
@@ -87,14 +78,6 @@ export function SettingsView() {
       () => request("save_settings", { key, value }),
       "设置已保存",
     ).finally(() => setBusy(false));
-  };
-  const modeChange = (next: string) => {
-    setBusy(true);
-    void run(() => windowAction(next))
-      .then((status) => {
-        if (status) setMode(status);
-      })
-      .finally(() => setBusy(false));
   };
   const dataOp = (action: string) => {
     if (busy) return;
@@ -117,35 +100,12 @@ export function SettingsView() {
         <Settings2 size={38} className="page-mark" />
       </div>
       <section className="surface setting-section">
-        <h2>桌面小组件</h2>
+        <h2>小组件</h2>
         <div className="setting-row">
           <span>
-            窗口模式
-            <small>
-              {mode?.message ??
-                (s.widget_mode === "topmost"
-                  ? "始终置顶"
-                  : "桌面模式状态读取中…")}
-            </small>
+            始终置顶
+            <small>小组件显示在其他普通窗口上方</small>
           </span>
-          <div className="segmented">
-            <button
-              disabled={busy}
-              className={s.widget_mode === "desktop" ? "active" : ""}
-              onClick={() => modeChange("desktop")}
-            >
-              <Monitor size={14} />
-              桌面
-            </button>
-            <button
-              disabled={busy}
-              className={s.widget_mode === "topmost" ? "active" : ""}
-              onClick={() => modeChange("topmost")}
-            >
-              <Pin size={14} />
-              置顶
-            </button>
-          </div>
         </div>
         <label className="setting-row">
           <span>最多显示任务</span>
@@ -199,7 +159,7 @@ export function SettingsView() {
             void run(() => windowAction("widget"));
           }}
         >
-          显示桌面小组件
+          显示小组件
         </button>
       </section>
       <section className="surface setting-section">

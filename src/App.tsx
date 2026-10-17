@@ -218,7 +218,7 @@ export function App() {
             }}
           >
             <PanelTop size={17} />
-            显示桌面小组件
+            显示小组件
             <ArrowUpRight size={14} />
           </button>
           <div className="local-indicator">

@@ -322,7 +322,6 @@ fn categories_and_settings_validate_and_persist() {
         assert!(repo::save_category(&c, None, "自定义", "#abcd12").is_err());
         assert!(repo::save_category(&c, None, "非法", "red").is_err());
         let mut s = Settings::default();
-        s.widget_mode = "topmost".into();
         s.widget_count = 8;
         crate::db::save_settings(&c, &s).unwrap();
         assert_eq!(crate::db::settings(&c).unwrap().widget_count, 8);
@@ -432,7 +431,7 @@ fn complete_business_loop_survives_restart() {
         )
         .unwrap();
         let mut s = Settings::default();
-        s.widget_mode = "topmost".into();
+        s.widget_count = 8;
         crate::db::save_settings(&c, &s).unwrap();
     }
     let db = Database::open(dir.path()).unwrap();
@@ -441,7 +440,7 @@ fn complete_business_loop_survives_restart() {
     assert_eq!(completion_count(&r), 1);
     assert_eq!(manual_count(&r, "completed"), 1);
     assert_eq!(completion_title(&r), "完成项目代码优化");
-    assert_eq!(crate::db::settings(&c).unwrap().widget_mode, "topmost");
+    assert_eq!(crate::db::settings(&c).unwrap().widget_count, 8);
 }
 
 #[test]

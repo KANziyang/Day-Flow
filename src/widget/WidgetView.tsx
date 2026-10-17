@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Pin, PinOff, Maximize2, CheckCheck, Leaf, Minus } from "lucide-react";
+import { Maximize2, CheckCheck, Leaf, Minus } from "lucide-react";
 import { useClock, useData } from "../hooks/useData";
 import { native, windowAction } from "../services/api";
 import {
@@ -10,30 +8,11 @@ import {
   localDate,
   sortTasks,
 } from "../services/taskService";
-import type { ModeStatus } from "../types";
 import { TaskItem } from "../components/TaskItem";
 import { QuickAdd } from "../components/QuickAdd";
 export function WidgetView() {
-  const { data, loading, error, run, refresh, notice, dismiss, reportError } = useData(),
+  const { data, loading, error, run, refresh, notice, dismiss } = useData(),
     now = useClock();
-  const [mode, setMode] = useState<ModeStatus | null>(null),
-    [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (!native) return;
-    let alive = true;
-    const sub = listen<ModeStatus>("window-mode", (e) => {
-      if (alive) setMode(e.payload);
-    });
-    void windowAction("mode_status")
-      .then((v) => {
-        if (alive) setMode(v);
-      })
-      .catch((error) => { if (alive) reportError(error); });
-    return () => {
-      alive = false;
-      void sub.then((fn) => fn());
-    };
-  }, [reportError]);
   const today = localDate(now),
     active = data ? sortTasks(data.tasks.filter(isActive), now) : [];
   const done =
@@ -79,32 +58,6 @@ export function WidgetView() {
         <span className="widget-date">
           {now.toLocaleDateString("zh-CN", { month: "long", day: "numeric" })}
         </span>
-        <button
-          className={`icon-button ${data?.settings.widget_mode === "topmost" ? "active" : ""}`}
-          aria-label="切换置顶模式"
-          title={mode?.message ?? "切换窗口模式"}
-          disabled={busy || !data}
-          onClick={() => {
-            setBusy(true);
-            void run(() =>
-              windowAction(
-                data!.settings.widget_mode === "topmost"
-                  ? "desktop"
-                  : "topmost",
-              ),
-            )
-              .then((v) => {
-                if (v) setMode(v);
-              })
-              .finally(() => setBusy(false));
-          }}
-        >
-          {data?.settings.widget_mode === "topmost" ? (
-            <Pin size={15} />
-          ) : (
-            <PinOff size={15} />
-          )}
-        </button>
         <button
           className="icon-button"
           aria-label="展开完整窗口"
@@ -209,13 +162,8 @@ export function WidgetView() {
             </div>
             <footer className="widget-footer">
               <QuickAdd compact />
-              <div className="widget-mode" title={mode?.message}>
-                {notice ||
-                  (mode?.embedded
-                    ? "桌面宿主"
-                    : data.settings.widget_mode === "topmost"
-                      ? "始终置顶"
-                      : "桌面兼容模式")}
+              <div className="widget-status">
+                {notice || "始终置顶"}
               </div>
             </footer>
           </>

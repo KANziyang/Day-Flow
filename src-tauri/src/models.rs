@@ -106,7 +106,6 @@ pub struct TaskEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    pub widget_mode: String,
     pub widget_count: usize,
     pub widget_opacity: f64,
     pub remember_position: bool,
@@ -123,7 +122,6 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            widget_mode: "desktop".into(),
             widget_count: 5,
             widget_opacity: 1.0,
             remember_position: true,

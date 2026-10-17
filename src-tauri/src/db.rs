@@ -32,7 +32,7 @@ impl Database {
     }
     pub fn migrate(conn: &mut Connection) -> Result<()> {
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version > 2 {
+        if version > 3 {
             bail!("数据库由更高版本创建，不能用旧版打开");
         }
         if version < 1 {
@@ -45,6 +45,12 @@ impl Database {
             let tx = conn.transaction()?;
             tx.execute_batch(include_str!("../migrations/0002_work_records.sql"))?;
             tx.pragma_update(None, "user_version", 2)?;
+            tx.commit()?;
+        }
+        if version < 3 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(include_str!("../migrations/0003_remove_widget_mode.sql"))?;
+            tx.pragma_update(None, "user_version", 3)?;
             tx.commit()?;
         }
         Ok(())
@@ -75,7 +81,7 @@ impl Database {
         }
         let source = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         let version: i64 = source.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if ![1, 2].contains(&version) {
+        if ![1, 2, 3].contains(&version) {
             bail!("不是受支持的 DayFlow 数据库备份");
         }
         let mut staging = Connection::open_in_memory()?;
@@ -99,7 +105,7 @@ impl Database {
     }
     pub fn export(&self) -> Result<PathBuf> {
         let conn = self.lock()?;
-        let value = serde_json::json!({"format":"DayFlow", "version":2, "exported_at":now(), "data":snapshot(&conn,&self.dir)?, "events":crate::repository::all_events(&conn)?});
+        let value = serde_json::json!({"format":"DayFlow", "version":3, "exported_at":now(), "data":snapshot(&conn,&self.dir)?, "events":crate::repository::all_events(&conn)?});
         let folder = self.dir.join("exports");
         std::fs::create_dir_all(&folder)?;
         let path = folder.join(format!(
@@ -130,8 +136,7 @@ pub fn save_settings(conn: &Connection, s: &Settings) -> Result<()> {
     Ok(())
 }
 fn validate_settings(s: &Settings) -> Result<()> {
-    if !["desktop", "topmost"].contains(&s.widget_mode.as_str())
-        || ![3, 5, 8].contains(&s.widget_count)
+    if ![3, 5, 8].contains(&s.widget_count)
         || !(0.35..=1.0).contains(&s.widget_opacity)
         || !["light", "dark", "system"].contains(&s.theme.as_str())
         || !["high", "medium", "low"].contains(&s.default_priority.as_str())

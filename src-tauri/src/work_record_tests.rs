@@ -105,6 +105,127 @@ fn create_v1_database(path: &Path) {
     .unwrap();
 }
 
+fn create_old_mode_database(path: &Path, version: i64, mode: &str) -> serde_json::Value {
+    create_v1_database(path);
+    let c = Connection::open(path).unwrap();
+    if version == 2 {
+        c.execute_batch(include_str!("../migrations/0002_work_records.sql"))
+            .unwrap();
+        c.pragma_update(None, "user_version", 2).unwrap();
+    }
+    let mut preferences = serde_json::to_value(Settings::default()).unwrap();
+    preferences["widget_count"] = serde_json::json!(8);
+    preferences["widget_opacity"] = serde_json::json!(0.65);
+    preferences["theme"] = serde_json::json!("dark");
+    preferences["close_to_tray"] = serde_json::json!(false);
+    let expected = preferences.clone();
+    preferences["widget_mode"] = serde_json::json!(mode);
+    c.execute(
+        "INSERT INTO settings(key,value,updated_at_utc) VALUES('preferences',?1,?2)",
+        params![preferences.to_string(), at("2026-10-17", 9)],
+    )
+    .unwrap();
+    c.execute(
+        "INSERT INTO settings(key,value,updated_at_utc) VALUES('window_widget',?1,?2)",
+        params![
+            r#"{"x":200,"y":150,"width":320,"height":420}"#,
+            at("2026-10-17", 9)
+        ],
+    )
+    .unwrap();
+    expected
+}
+
+fn saved_preferences(c: &Connection) -> serde_json::Value {
+    let value: String = c
+        .query_row(
+            "SELECT value FROM settings WHERE key='preferences'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    serde_json::from_str(&value).unwrap()
+}
+
+#[test]
+fn upgrading_old_window_modes_removes_only_the_retired_preference() {
+    for version in [1, 2] {
+        for mode in ["desktop", "topmost"] {
+            let dir = tempfile::tempdir().unwrap();
+            let expected = create_old_mode_database(&dir.path().join("dayflow.db"), version, mode);
+            {
+                let db = Database::open(dir.path()).unwrap();
+                let mut c = db.lock().unwrap();
+                assert_eq!(
+                    c.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+                        .unwrap(),
+                    3
+                );
+                assert_eq!(saved_preferences(&c), expected);
+                assert_eq!(
+                    serde_json::to_value(crate::db::settings(&c).unwrap()).unwrap(),
+                    expected
+                );
+                let geometry: String = c
+                    .query_row(
+                        "SELECT value FROM settings WHERE key='window_widget'",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .unwrap();
+                assert_eq!(geometry, r#"{"x":200,"y":150,"width":320,"height":420}"#);
+                let log = repo::logs(&c).unwrap().pop().unwrap();
+                assert_eq!(log.content, "旧版原始内容");
+                assert_eq!(log.kind, "progress");
+                Database::migrate(&mut c).unwrap();
+                assert_eq!(saved_preferences(&c), expected);
+                let mut settings = crate::db::settings(&c).unwrap();
+                settings.widget_count = 3;
+                crate::db::save_settings(&c, &settings).unwrap();
+            }
+            let reopened = Database::open(dir.path()).unwrap();
+            let c = reopened.lock().unwrap();
+            assert_eq!(crate::db::settings(&c).unwrap().widget_count, 3);
+            assert!(saved_preferences(&c).get("widget_mode").is_none());
+        }
+    }
+}
+
+#[test]
+fn restoring_old_window_modes_migrates_only_the_copy_and_exports_current_settings() {
+    for version in [1, 2] {
+        for mode in ["desktop", "topmost"] {
+            let source_dir = tempfile::tempdir().unwrap();
+            let source = source_dir.path().join("old-mode.db");
+            let expected = create_old_mode_database(&source, version, mode);
+            let bytes = std::fs::read(&source).unwrap();
+            let live_dir = tempfile::tempdir().unwrap();
+            let db = Database::open(live_dir.path()).unwrap();
+            db.restore(&source).unwrap();
+            {
+                let c = db.lock().unwrap();
+                assert_eq!(saved_preferences(&c), expected);
+                assert_eq!(
+                    c.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+                        .unwrap(),
+                    3
+                );
+                let settings = crate::db::settings(&c).unwrap();
+                crate::db::save_settings(&c, &settings).unwrap();
+                assert_eq!(saved_preferences(&c), expected);
+            }
+            assert_eq!(std::fs::read(&source).unwrap(), bytes);
+            let original = Connection::open(&source).unwrap();
+            assert_eq!(saved_preferences(&original)["widget_mode"], mode);
+            let export: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(db.export().unwrap()).unwrap()).unwrap();
+            assert_eq!(export["version"], 3);
+            assert_eq!(export["data"]["settings"], expected);
+            assert_eq!(export["data"]["work_records"].as_array().unwrap().len(), 1);
+        }
+    }
+}
+
 #[test]
 fn planned_task_completion_appears_without_creating_a_manual_record() {
     with_db(|db| {
@@ -427,7 +548,7 @@ fn v1_database_upgrade_preserves_original_logs_as_progress_and_is_repeatable() {
         let version: i64 = c
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
         let logs = repo::logs(&c).unwrap();
         assert_eq!(logs.len(), 1);
         assert_eq!(logs[0].id, "legacy");
@@ -472,7 +593,7 @@ fn restoring_v1_backup_migrates_a_copy_and_is_immediately_writable() {
         assert_eq!(
             c.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
                 .unwrap(),
-            2
+            3
         );
         assert_eq!(repo::logs(&c).unwrap()[0].kind, "progress");
         assert!(repo::tasks(&c).unwrap().is_empty());
@@ -501,7 +622,7 @@ fn restoring_v1_backup_migrates_a_copy_and_is_immediately_writable() {
 }
 
 #[test]
-fn restoring_v2_backup_preserves_types_and_allows_immediate_edits() {
+fn restoring_current_backup_preserves_types_and_allows_immediate_edits() {
     let source_dir = tempfile::tempdir().unwrap();
     let backup;
     {
@@ -521,7 +642,7 @@ fn restoring_v2_backup_preserves_types_and_allows_immediate_edits() {
             )
             .unwrap();
         }
-        backup = source.backup("v2-records").unwrap();
+        backup = source.backup("current-records").unwrap();
     }
     let original_bytes = std::fs::read(&backup).unwrap();
     let live_dir = tempfile::tempdir().unwrap();
@@ -586,7 +707,7 @@ fn invalid_and_future_backups_never_replace_current_work_records() {
     let future = dir.path().join("future.db");
     {
         let c = Connection::open(&future).unwrap();
-        c.pragma_update(None, "user_version", 3).unwrap();
+        c.pragma_update(None, "user_version", 4).unwrap();
     }
     let missing_schema = dir.path().join("missing-schema.db");
     {
@@ -611,7 +732,7 @@ fn invalid_and_future_backups_never_replace_current_work_records() {
 }
 
 #[test]
-fn json_export_uses_version_two_and_the_shared_work_record_projection() {
+fn json_export_uses_version_three_and_the_shared_work_record_projection() {
     with_db(|db| {
         {
             let mut c = db.lock().unwrap();
@@ -632,7 +753,7 @@ fn json_export_uses_version_two_and_the_shared_work_record_projection() {
         let exported: serde_json::Value =
             serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
         assert_eq!(exported["format"], "DayFlow");
-        assert_eq!(exported["version"], 2);
+        assert_eq!(exported["version"], 3);
         let records = exported["data"]["work_records"].as_array().unwrap();
         assert_eq!(records.len(), 3);
         assert!(exported["data"].get("logs").is_none());

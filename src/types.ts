@@ -64,7 +64,6 @@ export interface TaskEvent {
   created_at_utc: string;
 }
 export interface Settings {
-  widget_mode: "desktop" | "topmost";
   widget_count: 3 | 5 | 8;
   widget_opacity: number;
   remember_position: boolean;
@@ -84,11 +83,6 @@ export interface Snapshot {
   work_records: WorkRecord[];
   settings: Settings;
   data_dir: string;
-}
-export interface ModeStatus {
-  mode: string;
-  embedded: boolean;
-  message: string;
 }
 export interface Report {
   kind: string;

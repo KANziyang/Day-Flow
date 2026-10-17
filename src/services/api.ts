@@ -1,6 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type {
-  ModeStatus,
   Report,
   Snapshot,
   Task,
@@ -33,8 +32,8 @@ export const api = {
     },
   ) => request<WorkLog>("save_log", input),
 };
-export function windowAction(action: string, taskId?: string) {
-  return invoke<ModeStatus>("window_action", {
+export function windowAction(action: "main" | "widget" | "hide_widget" | "quit", taskId?: string) {
+  return invoke<void>("window_action", {
     action,
     taskId: taskId ?? null,
   });

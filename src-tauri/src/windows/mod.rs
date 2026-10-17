@@ -1,4 +1,3 @@
-pub mod desktop_host;
 use crate::{db, models::*};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -130,33 +129,10 @@ pub fn set_widget_visible(app: &tauri::AppHandle, visible: bool) -> Result<()> {
     let w = app
         .get_webview_window("widget")
         .ok_or_else(|| anyhow::anyhow!("小组件窗口不存在"))?;
-    if !desktop_host::set_visible(&w, visible)? {
-        if visible {
-            w.show()?;
-        } else {
-            w.hide()?;
-        }
+    if visible {
+        w.show()?;
+    } else {
+        w.hide()?;
     }
     Ok(())
-}
-pub fn apply_mode(app: &tauri::AppHandle, mode: &str) -> Result<desktop_host::ModeStatus> {
-    let w = app
-        .get_webview_window("widget")
-        .ok_or_else(|| anyhow::anyhow!("小组件窗口不存在"))?;
-    desktop_host::detach(&w)?;
-    w.set_always_on_top(mode == "topmost")?;
-    let status = if mode == "topmost" {
-        desktop_host::ModeStatus {
-            mode: "topmost".into(),
-            embedded: false,
-            message: "始终置顶".into(),
-        }
-    } else {
-        desktop_host::attach(&w)
-    };
-    if let Ok(mut saved) = app.state::<crate::RuntimeStatus>().0.lock() {
-        *saved = status.clone();
-    }
-    app.emit("window-mode", &status)?;
-    Ok(status)
 }

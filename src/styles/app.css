@@ -1329,7 +1329,7 @@ i {
   width: 25px;
   height: 26px;
 }
-.widget-mode {
+.widget-status {
   font-size: 8px;
   color: var(--muted);
   padding: 4px 18px 8px;
