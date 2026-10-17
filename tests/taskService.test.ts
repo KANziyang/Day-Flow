@@ -70,14 +70,17 @@ describe("小组件与主窗口共享的排序规则", () => {
       b = { ...task("后", null), created_at_utc: "2026-10-02T00:00:00Z" };
     expect(sortTasks([b, a], now).map((t) => t.id)).toEqual(["先", "后"]);
   });
-  it("完成与取消不标记逾期，今日包含当天实际完成", () => {
+  it("今日待办只包含待推进任务，完成与取消不标记逾期", () => {
     const t = {
       ...task("完成", "2026-10-01"),
       status: "completed" as const,
       completed_at_utc: now.toISOString(),
     };
     expect(isOverdue(t, now)).toBe(false);
-    expect(isTodayTask(t, now)).toBe(true);
+    expect(isTodayTask(t, now)).toBe(false);
+    expect(isTodayTask(task("今天计划", "2026-10-17"), now)).toBe(true);
+    expect(isTodayTask(task("此前计划", "2026-10-16"), now)).toBe(true);
+    expect(isTodayTask(task("未来计划", "2026-10-18"), now)).toBe(false);
     expect(isOverdue({ ...t, status: "cancelled" }, now)).toBe(false);
   });
   it("格式与明天提示使用本地日期", () => {

@@ -2,16 +2,19 @@ import { Plus, CalendarDays, ArrowUp } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useData } from "../hooks/useData";
 import { api } from "../services/api";
+import { localDate } from "../services/taskService";
 export function QuickAdd({ compact = false }: { compact?: boolean }) {
   const { data, run } = useData();
   const [title, setTitle] = useState(""),
-    [date, setDate] = useState(""),
+    [date, setDate] = useState<string>(),
     [time, setTime] = useState(""),
     [expand, setExpand] = useState(false),
     [busy, setBusy] = useState(false);
+  const selectedDate = date ?? localDate();
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!title.trim() || busy || !data) return;
+    const dueDate = date ?? localDate();
     setBusy(true);
     const result = await run(
       () =>
@@ -21,14 +24,14 @@ export function QuickAdd({ compact = false }: { compact?: boolean }) {
           status: "todo",
           priority: data.settings.default_priority,
           category_id: null,
-          due_date_local: date || null,
-          due_time_local: date && time ? time : null,
+          due_date_local: dueDate || null,
+          due_time_local: dueDate && time ? time : null,
         }),
       "任务已添加",
     );
     if (result) {
       setTitle("");
-      setDate("");
+      setDate(undefined);
       setTime("");
       setExpand(false);
     }
@@ -72,7 +75,7 @@ export function QuickAdd({ compact = false }: { compact?: boolean }) {
               type="date"
               min="1900-01-01"
               max="9999-12-31"
-              value={date}
+              value={selectedDate}
               onChange={(e) => {
                 setDate(e.target.value);
                 if (!e.target.value) setTime("");
@@ -84,7 +87,7 @@ export function QuickAdd({ compact = false }: { compact?: boolean }) {
             <input
               aria-label="快速任务截止时刻"
               type="time"
-              disabled={!date}
+              disabled={!selectedDate}
               value={time}
               onChange={(e) => setTime(e.target.value)}
             />

@@ -5,6 +5,8 @@ mod repository;
 #[cfg(test)]
 mod tests;
 mod windows;
+#[cfg(test)]
+mod work_record_tests;
 
 use anyhow::{bail, Result};
 use db::Database;

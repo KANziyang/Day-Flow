@@ -3,24 +3,18 @@ use anyhow::{bail, Result};
 use chrono::{Datelike, Duration, Local, NaiveDate, TimeZone, Utc};
 use rusqlite::Connection;
 use serde::Serialize;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 #[derive(Serialize)]
 pub struct Report {
     pub kind: String,
     pub start: String,
     pub end: String,
-    pub created: usize,
-    pub completed: usize,
-    pub completion_events: usize,
-    pub in_progress: usize,
-    pub completions: Vec<TaskEvent>,
-    pub logs: Vec<WorkLog>,
+    pub next_start: String,
+    pub next_end: String,
+    pub work_records: Vec<WorkRecord>,
     pub unfinished: Vec<Task>,
     pub upcoming: Vec<Task>,
-    pub daily: Vec<(String, usize)>,
-    pub weekly: Vec<(String, usize)>,
-    pub categories: Vec<(String, usize)>,
 }
 pub fn period(kind: &str, date: NaiveDate) -> Result<(NaiveDate, NaiveDate)> {
     let start = match kind {
@@ -70,40 +64,32 @@ pub fn generate_between(
     from: &str,
     until: &str,
 ) -> Result<Report> {
+    let (next_start, next_end) = period(kind, end)?;
     let events = repository::all_events(c)?;
     let mut states: HashMap<String, Task> = HashMap::new();
-    let mut created = 0;
-    let mut completion_events = 0;
     let mut completed: HashMap<String, TaskEvent> = HashMap::new();
-    let mut daily: BTreeMap<String, std::collections::HashSet<String>> = BTreeMap::new();
     for e in &events {
         if e.created_at_utc.as_str() < until {
             let state: Task = serde_json::from_str(&e.snapshot_json)?;
             states.insert(e.task_id.clone(), state);
         }
-        if e.created_at_utc.as_str() >= from && e.created_at_utc.as_str() < until {
-            if e.event_type == "created" {
-                created += 1;
-            }
-            if e.event_type == "completed" {
-                completion_events += 1;
-                let local = chrono::DateTime::parse_from_rfc3339(&e.created_at_utc)?
-                    .with_timezone(&Local)
-                    .date_naive();
-                daily
-                    .entry(local.to_string())
-                    .or_default()
-                    .insert(e.task_id.clone());
-                completed.insert(e.task_id.clone(), e.clone());
-            }
+        if e.created_at_utc.as_str() >= from
+            && e.created_at_utc.as_str() < until
+            && e.event_type == "completed"
+        {
+            completed.insert(e.task_id.clone(), e.clone());
         }
     }
-    let mut completions: Vec<_> = completed.into_values().collect();
-    completions.sort_by(|a, b| a.created_at_utc.cmp(&b.created_at_utc));
     let logs = repository::logs(c)?
         .into_iter()
         .filter(|l| l.local_date >= start.to_string() && l.local_date < end.to_string())
         .collect::<Vec<_>>();
+    let mut work_records = completed
+        .values()
+        .map(|event| repository::completion_record(event, &events))
+        .collect::<Result<Vec<_>>>()?;
+    work_records.extend(logs.into_iter().map(|log| WorkRecord::Manual { log }));
+    repository::sort_work_records(&mut work_records);
     let mut unfinished: Vec<_> = states
         .into_values()
         .filter(|t| {
@@ -125,49 +111,20 @@ pub fn generate_between(
     let upcoming = unfinished
         .iter()
         .filter(|t| {
-            t.due_date_local.as_ref().is_some_and(|d| {
-                d >= &end.to_string() && d < &(end + Duration::days(7)).to_string()
-            })
+            t.due_date_local
+                .as_ref()
+                .is_some_and(|d| d >= &next_start.to_string() && d < &next_end.to_string())
         })
         .cloned()
         .collect();
-    let in_progress = unfinished
-        .iter()
-        .filter(|t| t.status == "in_progress")
-        .count();
-    let mut category_counts: BTreeMap<String, usize> = BTreeMap::new();
-    for e in &completions {
-        let snapshot: serde_json::Value = serde_json::from_str(&e.snapshot_json)?;
-        let name = snapshot["category_name_snapshot"]
-            .as_str()
-            .unwrap_or("未分类")
-            .to_owned();
-        *category_counts.entry(name).or_default() += 1;
-    }
-    let mut weekly: BTreeMap<String, usize> = BTreeMap::new();
-    let mut days = Vec::new();
-    let mut d = start;
-    while d < end {
-        let count = daily.get(&d.to_string()).map_or(0, |x| x.len());
-        days.push((d.to_string(), count));
-        let monday = d - Duration::days(d.weekday().num_days_from_monday() as i64);
-        *weekly.entry(monday.to_string()).or_default() += count;
-        d += Duration::days(1);
-    }
     Ok(Report {
         kind: kind.into(),
         start: start.to_string(),
         end: (end - Duration::days(1)).to_string(),
-        created,
-        completed: completions.len(),
-        completion_events,
-        in_progress,
-        completions,
-        logs,
+        next_start: next_start.to_string(),
+        next_end: (next_end - Duration::days(1)).to_string(),
+        work_records,
         unfinished,
         upcoming,
-        daily: days,
-        weekly: weekly.into_iter().collect(),
-        categories: category_counts.into_iter().collect(),
     })
 }

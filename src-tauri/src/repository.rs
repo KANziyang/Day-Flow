@@ -2,6 +2,7 @@ use crate::models::*;
 use anyhow::{bail, Result};
 use chrono::{Local, NaiveDate, NaiveTime, TimeZone};
 use rusqlite::{params, Connection, OptionalExtension, Row};
+use std::collections::BTreeMap;
 
 pub fn validate_date(s: &str) -> Result<NaiveDate> {
     let d =
@@ -70,7 +71,65 @@ pub fn categories(c: &Connection) -> Result<Vec<Category>> {
     )
 }
 pub fn logs(c: &Connection) -> Result<Vec<WorkLog>> {
-    Ok(c.prepare("SELECT id,task_id,local_date,content,created_at_utc,updated_at_utc FROM work_logs ORDER BY local_date DESC,created_at_utc DESC")?.query_map([],|r|Ok(WorkLog{id:r.get(0)?,task_id:r.get(1)?,local_date:r.get(2)?,content:r.get(3)?,created_at_utc:r.get(4)?,updated_at_utc:r.get(5)?}))?.collect::<rusqlite::Result<_>>()?)
+    Ok(c.prepare("SELECT id,task_id,kind,local_date,content,created_at_utc,updated_at_utc FROM work_logs ORDER BY local_date DESC,created_at_utc DESC,id")?.query_map([],|r|Ok(WorkLog{id:r.get(0)?,task_id:r.get(1)?,kind:r.get(2)?,local_date:r.get(3)?,content:r.get(4)?,created_at_utc:r.get(5)?,updated_at_utc:r.get(6)?}))?.collect::<rusqlite::Result<_>>()?)
+}
+pub fn completion_record(event: &TaskEvent, events: &[TaskEvent]) -> Result<WorkRecord> {
+    if event.event_type != "completed" {
+        bail!("只有完成事件可以生成任务完成记录");
+    }
+    let local_date = chrono::DateTime::parse_from_rfc3339(&event.created_at_utc)?
+        .with_timezone(&Local)
+        .date_naive()
+        .to_string();
+    let position = events
+        .iter()
+        .position(|e| e.id == event.id)
+        .ok_or_else(|| anyhow::anyhow!("完成事件不存在于任务历史中"))?;
+    let reopened_at_utc = events[position + 1..]
+        .iter()
+        .find(|e| {
+            e.task_id == event.task_id
+                && matches!(e.event_type.as_str(), "reopened" | "status_changed")
+                && matches!(e.new_value.as_deref(), Some("todo" | "in_progress"))
+        })
+        .map(|e| e.created_at_utc.clone());
+    Ok(WorkRecord::TaskCompletion {
+        id: format!("task:{}:{}", event.task_id, local_date),
+        event_id: event.id.clone(),
+        task_id: event.task_id.clone(),
+        local_date,
+        content: event.task_title_snapshot.clone(),
+        created_at_utc: event.created_at_utc.clone(),
+        reopened_at_utc,
+    })
+}
+pub fn sort_work_records(records: &mut [WorkRecord]) {
+    records.sort_by(|a, b| {
+        b.local_date()
+            .cmp(a.local_date())
+            .then_with(|| {
+                chrono::DateTime::parse_from_rfc3339(b.created_at_utc())
+                    .ok()
+                    .cmp(&chrono::DateTime::parse_from_rfc3339(a.created_at_utc()).ok())
+            })
+            .then_with(|| a.id().cmp(b.id()))
+    });
+}
+pub fn work_records(c: &Connection) -> Result<Vec<WorkRecord>> {
+    let events = all_events(c)?;
+    let mut completions = BTreeMap::new();
+    for event in events.iter().filter(|e| e.event_type == "completed") {
+        let record = completion_record(event, &events)?;
+        completions.insert(record.id().to_owned(), record);
+    }
+    let mut records: Vec<_> = completions.into_values().collect();
+    for log in logs(c)? {
+        validate_date(&log.local_date)?;
+        chrono::DateTime::parse_from_rfc3339(&log.created_at_utc)?;
+        records.push(WorkRecord::Manual { log });
+    }
+    sort_work_records(&mut records);
+    Ok(records)
 }
 pub fn all_events(c: &Connection) -> Result<Vec<TaskEvent>> {
     Ok(c.prepare("SELECT id,task_id,event_type,old_value,new_value,task_title_snapshot,snapshot_json,created_at_utc FROM task_events ORDER BY created_at_utc,rowid")?.query_map([],|r|Ok(TaskEvent{id:r.get(0)?,task_id:r.get(1)?,event_type:r.get(2)?,old_value:r.get(3)?,new_value:r.get(4)?,task_title_snapshot:r.get(5)?,snapshot_json:r.get(6)?,created_at_utc:r.get(7)?}))?.collect::<rusqlite::Result<_>>()?)
@@ -306,6 +365,9 @@ pub fn delete_task(c: &mut Connection, id: &str, restore: bool) -> Result<()> {
 }
 pub fn save_log(c: &Connection, i: LogInput) -> Result<WorkLog> {
     validate_date(&i.local_date)?;
+    if !["completed", "progress"].contains(&i.kind.as_str()) {
+        bail!("工作记录类型无效");
+    }
     let content = i.content.trim();
     if content.is_empty() || content.chars().count() > 20000 {
         bail!("工作内容须为 1 至 20000 字");
@@ -317,6 +379,7 @@ pub fn save_log(c: &Connection, i: LogInput) -> Result<WorkLog> {
     let mut l = WorkLog {
         id: i.id.clone().unwrap_or_else(id),
         task_id: i.task_id,
+        kind: i.kind,
         local_date: i.local_date,
         content: content.into(),
         created_at_utc: at.clone(),
@@ -330,13 +393,13 @@ pub fn save_log(c: &Connection, i: LogInput) -> Result<WorkLog> {
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .optional()?;
-        let (created, updated) = old.ok_or_else(|| anyhow::anyhow!("日志不存在"))?;
+        let (created, updated) = old.ok_or_else(|| anyhow::anyhow!("工作记录不存在"))?;
         if i.expected_updated_at.as_deref() != Some(&updated) {
-            bail!("日志已在另一个窗口修改，请重新载入");
+            bail!("工作记录已在另一个窗口修改，请重新载入");
         }
         l.created_at_utc = created;
     }
-    c.execute("INSERT INTO work_logs(id,task_id,local_date,content,created_at_utc,updated_at_utc) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(id) DO UPDATE SET task_id=excluded.task_id,local_date=excluded.local_date,content=excluded.content,updated_at_utc=excluded.updated_at_utc",params![l.id,l.task_id,l.local_date,l.content,l.created_at_utc,l.updated_at_utc])?;
+    c.execute("INSERT INTO work_logs(id,task_id,kind,local_date,content,created_at_utc,updated_at_utc) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id) DO UPDATE SET task_id=excluded.task_id,kind=excluded.kind,local_date=excluded.local_date,content=excluded.content,updated_at_utc=excluded.updated_at_utc",params![l.id,l.task_id,l.kind,l.local_date,l.content,l.created_at_utc,l.updated_at_utc])?;
     Ok(l)
 }
 pub fn save_category(c: &Connection, id_: Option<String>, name: &str, color: &str) -> Result<()> {

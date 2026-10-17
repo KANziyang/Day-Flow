@@ -11,6 +11,7 @@ import {
   type Task,
   type TaskEvent,
   type TaskInput,
+  type WorkRecord,
 } from "../types";
 function inputFor(t: Task | null, priority: Priority): TaskInput {
   return {
@@ -20,7 +21,7 @@ function inputFor(t: Task | null, priority: Priority): TaskInput {
     status: t?.status ?? "todo",
     priority: t?.priority ?? priority,
     category_id: t?.category_id ?? null,
-    due_date_local: t?.due_date_local ?? null,
+    due_date_local: t ? t.due_date_local : localDate(),
     due_time_local: t?.due_time_local ?? null,
     expected_updated_at: t?.updated_at_utc,
   };
@@ -110,7 +111,10 @@ export function TaskEditor({
     }
   };
   const stale = task && task.updated_at_utc !== base.expected_updated_at;
-  const progressLogs = data?.logs.filter((l) => l.task_id === task?.id) ?? [];
+  const progressLogs = data?.work_records.filter(
+    (record): record is Extract<WorkRecord, { source: "manual" }> =>
+      record.source === "manual" && record.task_id === task?.id,
+  ) ?? [];
   return (
     <aside className="detail-panel">
       <div className="panel-heading">
@@ -282,8 +286,9 @@ export function TaskEditor({
                       task_id: task.id,
                       local_date: localDate(),
                       content: progress,
+                      kind: "progress",
                     }),
-                  "进展已记入今天的工作日志",
+                  "进展已记入今天的工作记录",
                 )
                   .then((result) => {
                     if (result) setProgress("");
@@ -310,7 +315,7 @@ export function TaskEditor({
           )}
           {progressLogs.slice(0, 10).map((l) => (
             <div className="timeline-entry" key={l.id}>
-              <small>{l.local_date} · 工作进展</small>
+              <small>{l.local_date} · {l.kind === "completed" ? "手动完成" : "工作进展"}</small>
               <p>{l.content}</p>
             </div>
           ))}

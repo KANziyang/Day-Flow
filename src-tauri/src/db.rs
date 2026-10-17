@@ -32,13 +32,19 @@ impl Database {
     }
     pub fn migrate(conn: &mut Connection) -> Result<()> {
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version > 1 {
+        if version > 2 {
             bail!("数据库由更高版本创建，不能用旧版打开");
         }
         if version < 1 {
             let tx = conn.transaction()?;
             tx.execute_batch(include_str!("../migrations/0001_init.sql"))?;
             tx.pragma_update(None, "user_version", 1)?;
+            tx.commit()?;
+        }
+        if version < 2 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(include_str!("../migrations/0002_work_records.sql"))?;
+            tx.pragma_update(None, "user_version", 2)?;
             tx.commit()?;
         }
         Ok(())
@@ -68,33 +74,22 @@ impl Database {
             bail!("不能用正在使用的数据库恢复自身");
         }
         let source = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-        let check: String = source.query_row("PRAGMA integrity_check", [], |r| r.get(0))?;
-        if check != "ok" {
-            bail!("备份完整性检查失败");
-        }
         let version: i64 = source.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version != 1 {
+        if ![1, 2].contains(&version) {
             bail!("不是受支持的 DayFlow 数据库备份");
         }
-        // Validate all required columns before touching the live database.
-        source.prepare("SELECT id,title,description,status,priority,category_id,due_date_local,due_time_local,due_at_utc,created_at_utc,updated_at_utc,completed_at_utc,deleted_at_utc FROM tasks")?;
-        source.prepare("SELECT id,task_id,event_type,old_value,new_value,task_title_snapshot,snapshot_json,created_at_utc FROM task_events")?;
-        source.prepare(
-            "SELECT id,task_id,local_date,content,created_at_utc,updated_at_utc FROM work_logs",
+        let mut staging = Connection::open_in_memory()?;
+        rusqlite::backup::Backup::new(&source, &mut staging)?.run_to_completion(
+            128,
+            Duration::from_millis(5),
+            None,
         )?;
-        source.prepare("SELECT id,name,color,created_at_utc FROM categories")?;
-        source.prepare("SELECT key,value,updated_at_utc FROM settings")?;
-        source.prepare("SELECT task_id,due_key,sent_at_utc FROM notification_deliveries")?;
-        if source.prepare("PRAGMA foreign_key_check")?.exists([])? {
-            bail!("备份外键检查失败");
-        }
-        snapshot(&source, &self.dir)?;
-        for e in crate::repository::all_events(&source)? {
-            let _: Task = serde_json::from_str(&e.snapshot_json).context("备份任务快照损坏")?;
-        }
+        staging.execute_batch("PRAGMA foreign_keys=ON;")?;
+        Self::migrate(&mut staging).context("备份数据升级失败")?;
+        validate_backup(&staging, &self.dir)?;
         let mut conn = self.lock()?;
         let safety = Self::backup_conn(&conn, &self.dir, "before-restore")?;
-        rusqlite::backup::Backup::new(&source, &mut conn)?
+        rusqlite::backup::Backup::new(&staging, &mut conn)?
             .run_to_completion(128, Duration::from_millis(5), None)
             .context("恢复失败，原数据库已保留安全备份")?;
         conn.execute_batch(
@@ -104,7 +99,7 @@ impl Database {
     }
     pub fn export(&self) -> Result<PathBuf> {
         let conn = self.lock()?;
-        let value = serde_json::json!({"format":"DayFlow", "version":1, "exported_at":now(), "data":snapshot(&conn,&self.dir)?, "events":crate::repository::all_events(&conn)?});
+        let value = serde_json::json!({"format":"DayFlow", "version":2, "exported_at":now(), "data":snapshot(&conn,&self.dir)?, "events":crate::repository::all_events(&conn)?});
         let folder = self.dir.join("exports");
         std::fs::create_dir_all(&folder)?;
         let path = folder.join(format!(
@@ -130,6 +125,11 @@ pub fn settings(conn: &Connection) -> Result<Settings> {
         .unwrap_or_else(|| Ok(Settings::default()))
 }
 pub fn save_settings(conn: &Connection, s: &Settings) -> Result<()> {
+    validate_settings(s)?;
+    conn.execute("INSERT INTO settings(key,value,updated_at_utc) VALUES('preferences',?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at_utc=excluded.updated_at_utc", params![serde_json::to_string(s)?,now()])?;
+    Ok(())
+}
+fn validate_settings(s: &Settings) -> Result<()> {
     if !["desktop", "topmost"].contains(&s.widget_mode.as_str())
         || ![3, 5, 8].contains(&s.widget_count)
         || !(0.35..=1.0).contains(&s.widget_opacity)
@@ -141,16 +141,109 @@ pub fn save_settings(conn: &Connection, s: &Settings) -> Result<()> {
     for time in [&s.quiet_start, &s.quiet_end, &s.date_reminder_time] {
         crate::repository::validate_time(time)?;
     }
-    conn.execute("INSERT INTO settings(key,value,updated_at_utc) VALUES('preferences',?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at_utc=excluded.updated_at_utc", params![serde_json::to_string(s)?,now()])?;
     Ok(())
 }
 pub fn snapshot(conn: &Connection, dir: &Path) -> Result<Snapshot> {
     Ok(Snapshot {
         tasks: crate::repository::tasks(conn)?,
         categories: crate::repository::categories(conn)?,
-        logs: crate::repository::logs(conn)?,
+        work_records: crate::repository::work_records(conn)?,
         settings: settings(conn)?,
         data_dir: dir.to_string_lossy().into_owned(),
-        completion_events: conn.prepare("SELECT task_id,created_at_utc FROM task_events WHERE event_type='completed' ORDER BY created_at_utc")?.query_map([],|r|Ok((r.get(0)?,r.get(1)?)))?.collect::<rusqlite::Result<_>>()?,
     })
+}
+
+fn schema(conn: &Connection) -> Result<Vec<(String, String, String, String)>> {
+    Ok(conn.prepare("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type,name")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get::<_, String>(3)?.split_whitespace().collect::<Vec<_>>().join(" "))))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+fn validate_task_data(task: &Task) -> Result<()> {
+    if task.id.is_empty()
+        || task.title.trim().is_empty()
+        || task.title.chars().count() > 500
+        || task.description.chars().count() > 20000
+        || !["todo", "in_progress", "completed", "cancelled"].contains(&task.status.as_str())
+        || !["high", "medium", "low"].contains(&task.priority.as_str())
+        || (task.status == "completed") != task.completed_at_utc.is_some()
+        || (task.due_time_local.is_some() && task.due_date_local.is_none())
+    {
+        bail!("备份任务数据无效");
+    }
+    if let Some(date) = &task.due_date_local {
+        crate::repository::validate_date(date)?;
+    }
+    if let Some(time) = &task.due_time_local {
+        crate::repository::validate_time(time)?;
+    }
+    for timestamp in [
+        Some(&task.created_at_utc),
+        Some(&task.updated_at_utc),
+        task.completed_at_utc.as_ref(),
+        task.deleted_at_utc.as_ref(),
+        task.due_at_utc.as_ref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        chrono::DateTime::parse_from_rfc3339(timestamp).context("备份任务时间无效")?;
+    }
+    Ok(())
+}
+
+fn validate_backup(conn: &Connection, dir: &Path) -> Result<()> {
+    let mut expected = Connection::open_in_memory()?;
+    Database::migrate(&mut expected)?;
+    if schema(conn)? != schema(&expected)? {
+        bail!("备份数据库结构无效");
+    }
+    let mut checks = conn.prepare("PRAGMA integrity_check")?;
+    let checks = checks
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    if checks != ["ok"] {
+        bail!("备份完整性检查失败");
+    }
+    if conn.prepare("PRAGMA foreign_key_check")?.exists([])? {
+        bail!("备份外键检查失败");
+    }
+    let data = snapshot(conn, dir)?;
+    for task in &data.tasks {
+        validate_task_data(task)?;
+    }
+    for record in &data.work_records {
+        if let WorkRecord::Manual { log } = record {
+            if !["completed", "progress"].contains(&log.kind.as_str())
+                || log.content.trim().is_empty()
+                || log.content.chars().count() > 20000
+            {
+                bail!("备份工作记录无效");
+            }
+            crate::repository::validate_date(&log.local_date)?;
+            chrono::DateTime::parse_from_rfc3339(&log.created_at_utc)?;
+            chrono::DateTime::parse_from_rfc3339(&log.updated_at_utc)?;
+        }
+    }
+    validate_settings(&data.settings)?;
+    for category in &data.categories {
+        if category.name.trim().is_empty()
+            || category.name.chars().count() > 30
+            || category.color.len() != 7
+            || !category.color.starts_with('#')
+            || !category.color[1..].chars().all(|c| c.is_ascii_hexdigit())
+        {
+            bail!("备份分类无效");
+        }
+        chrono::DateTime::parse_from_rfc3339(&category.created_at_utc)?;
+    }
+    for event in crate::repository::all_events(conn)? {
+        chrono::DateTime::parse_from_rfc3339(&event.created_at_utc)?;
+        let task: Task = serde_json::from_str(&event.snapshot_json).context("备份任务快照损坏")?;
+        validate_task_data(&task)?;
+        if task.id != event.task_id || task.title != event.task_title_snapshot {
+            bail!("备份任务快照与事件不一致");
+        }
+    }
+    Ok(())
 }

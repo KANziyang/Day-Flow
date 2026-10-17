@@ -32,6 +32,7 @@ import { TaskItem } from "./components/TaskItem";
 import { TaskEditor } from "./components/TaskEditor";
 import { QuickAdd } from "./components/QuickAdd";
 import { WorkLogsView } from "./views/WorkLogsView";
+import { WorkRecordList, WorkRecordStats } from "./components/WorkRecordList";
 import { ReportsView } from "./views/ReportsView";
 import { SettingsView } from "./views/SettingsView";
 import { priorityLabels, statusLabels } from "./types";
@@ -39,7 +40,7 @@ type Page = "today" | "tasks" | "logs" | "reports" | "settings";
 const nav = [
   { id: "today", label: "今日任务", icon: Sun },
   { id: "tasks", label: "全部任务", icon: ListTodo },
-  { id: "logs", label: "工作日志", icon: BookOpen },
+  { id: "logs", label: "工作记录", icon: BookOpen },
   { id: "reports", label: "周期复盘", icon: ChartNoAxesCombined },
   { id: "settings", label: "设置", icon: Settings2 },
 ] as const;
@@ -123,7 +124,7 @@ export function App() {
         e.preventDefault();
         document.querySelector<HTMLInputElement>("[data-quick-add]")?.focus();
       }
-      if (e.key === "Escape" && canLeave()) {
+      if (e.key === "Escape" && (selected || creating) && canLeave()) {
         setSelected(null);
         setCreating(false);
         setDirty(false);
@@ -135,14 +136,14 @@ export function App() {
       window.removeEventListener("beforeunload", unload);
       window.removeEventListener("keydown", keys);
     };
-  }, [dirty, canLeave]);
-  const completedIds = new Set(data?.completion_events.filter(([,at]) => localDate(new Date(at)) === localDate(now)).map(([id]) => id));
+  }, [dirty, canLeave, selected, creating]);
+  const todayRecords = data?.work_records.filter((r) => r.local_date === localDate(now)) ?? [];
+  const completedIds = new Set(todayRecords.filter((r) => r.source === "task_completion").map((r) => r.task_id));
   const active = data?.tasks.filter(isActive) ?? [],
-    todayTasks = data?.tasks.filter((t) => isTodayTask(t, now) || !t.deleted_at_utc && completedIds.has(t.id)) ?? [];
-  const doneToday = todayTasks.filter((t) => t.status === "completed").length,
+    todayTasks = data?.tasks.filter((t) => isTodayTask(t, now)) ?? [];
+  const doneToday = data?.tasks.filter((t) => !t.deleted_at_utc && t.status === "completed" && completedIds.has(t.id)).length ?? 0,
     overdue = active.filter((t) => isOverdue(t, now)).length;
-  const todayLogs =
-    data?.logs.filter((l) => l.local_date === localDate(now)) ?? [];
+  const todayTaskTotal = todayTasks.length + doneToday;
   let visible =
     page === "today"
       ? todayTasks
@@ -381,12 +382,12 @@ export function App() {
                     <div className="progress-track">
                       <div
                         style={{
-                          width: `${todayTasks.length ? (doneToday / todayTasks.length) * 100 : 0}%`,
+                          width: `${todayTaskTotal ? (doneToday / todayTaskTotal) * 100 : 0}%`,
                         }}
                       />
                     </div>
                     <span>
-                      {doneToday} / {todayTasks.length}
+                      {doneToday} / {todayTaskTotal}
                     </span>
                   </div>
                 </>
@@ -480,7 +481,7 @@ export function App() {
                 )}
                 <QuickAdd />
               </section>
-              {completed.length > 0 && (
+              {page === "tasks" && completed.length > 0 && (
                 <section className="surface completed-list">
                   <div className="section-heading">
                     <h2>
@@ -514,8 +515,9 @@ export function App() {
                       <ArrowUpRight size={15} />
                     </button>
                   </div>
-                  {todayLogs.length ? (
-                    todayLogs.map((l) => <p key={l.id}>{l.content}</p>)
+                  <WorkRecordStats records={todayRecords} />
+                  {todayRecords.length ? (
+                    <WorkRecordList records={todayRecords} compact />
                   ) : (
                     <p className="muted">
                       还没有工作记录。计划之外的成果，也可以在这里留下。

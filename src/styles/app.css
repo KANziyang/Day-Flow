@@ -893,6 +893,60 @@ i {
   display: block;
   margin-top: 12px;
 }
+.work-record-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 16px 0;
+  margin-bottom: 16px;
+}
+.work-record-stats > div {
+  padding: 0 14px;
+}
+.work-record-stats span {
+  font-size: 10px;
+  white-space: normal;
+  margin-bottom: 8px;
+}
+.work-record-stats strong {
+  font-size: 24px;
+}
+.work-record-meta {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.work-record-source {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg);
+}
+.work-record-completed {
+  color: var(--accent);
+}
+.work-record-reopened {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 8px;
+}
+.work-record-list-compact .log-card {
+  margin: 0 18px;
+  padding: 14px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+.work-record-list-compact .log-card p {
+  font-size: 12px;
+  padding: 0;
+}
+.work-record-list-compact .linked-task {
+  margin-top: 6px;
+}
+.today-journal .work-record-stats {
+  margin: 0 18px 8px;
+}
 .report-toolbar {
   display: flex;
   justify-content: space-between;
@@ -926,48 +980,6 @@ i {
   font-size: 12px;
   background: var(--surface);
 }
-.trend {
-  margin-bottom: 22px;
-}
-.bar-chart {
-  display: flex;
-  gap: 18px;
-  align-items: flex-end;
-  padding: 20px 25px 22px;
-  height: 190px;
-}
-.chart-column {
-  flex: 1;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--muted);
-  min-width: 0;
-}
-.chart-column > span {
-  font-size: 11px;
-}
-.bar-track {
-  flex: 1;
-  width: min(100%, 45px);
-  display: flex;
-  align-items: flex-end;
-  background: var(--bg);
-  border-radius: 4px;
-  overflow: hidden;
-}
-.bar-track > div {
-  width: 100%;
-  background: color-mix(in srgb, var(--accent) 70%, var(--surface));
-  min-height: 1px;
-  border-radius: 4px;
-}
-.chart-column small {
-  font-size: 9px;
-}
 .report-paper {
   padding: 6px 7px;
 }
@@ -981,21 +993,10 @@ i {
   padding: 20px 24px;
   color: var(--text);
 }
-.report-paper .footnote {
-  padding: 10px 24px 20px;
-}
 .footnote {
   font-size: 10px;
   color: var(--muted);
   line-height: 1.8;
-}
-.report-empty {
-  padding: 15px 24px;
-  background: var(--accent-soft);
-  font-size: 12px;
-  margin: 10px 20px;
-  border-radius: 6px;
-  color: var(--accent);
 }
 .settings-view {
   max-width: 1050px;
