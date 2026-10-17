@@ -295,6 +295,12 @@ label textarea {
   font-size: 10px;
   color: var(--muted);
 }
+.app-version {
+  padding: 0 5px 7px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
 i {
   display: inline-block;
   width: 5px;

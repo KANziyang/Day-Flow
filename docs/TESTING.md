@@ -2,6 +2,19 @@
 
 本文件随实际验证更新，未执行的项目不能标为通过。
 
+## V1.0.0 发布与覆盖升级（2026-10-17）
+
+- npm、Cargo、Tauri 发布版本及锁文件统一为 `1.0.0`。主窗口侧栏和设置页显示 `V1.0.0`，共同读取 `tauri.conf.json` 的构建版本。
+- 本轮 `npm test` 6/6 通过，`npm run tauri build` 成功，包含严格 TypeScript、Vite 和 Rust 发布构建；版本一致性检查通过。
+- 对已安装的 `0.1.0` 创建应用内在线备份并正常退出，再通过资源管理器执行新版 NSIS 的 `/S /UPDATE /R`，没有先卸载旧程序。
+- 覆盖后的程序仍位于 `C:\Users\hp\AppData\Local\DayFlow\dayflow.exe`，PE 产品版本为 `1.0.0`；自动启动后只有一个进程，主窗口与小组件均显示。
+- 已通过真实窗口确认主窗口左侧的 `V1.0.0` 和设置页底部的 `DayFlow V1.0.0`。升级前的完成任务及独立日志正常显示。
+- 升级前后均通过应用备份 API 创建一致性快照，只读比较所有业务记录：1 个任务、2 条历史事件、1 条日志、4 个分类逐条完全一致，SQLite 完整性检查与外键检查通过，迁移版本仍为 1。
+- 本次没有额外写入的用户偏好设置；窗口位置键在退出时正常保存，不计入业务记录一致性比较。
+- 快照副本为 `.tools/upgrade-0.1.0-before.db` 和 `.tools/upgrade-1.0.0-after.db`；检查结果为 `.tools/upgrade-1.0.0-result.json` 和 `.tools/upgrade-data-comparison.json`。
+- 新版安装包 `C:\Users\hp\Desktop\DayFlow\src-tauri\target\release\bundle\nsis\DayFlow_1.0.0_x64-setup.exe`，2,044,187 字节；SHA256：`5fd9b34d0737fe8e440d1b98514d080a1932fcf68886e1423762c89b77e6a154`，未代码签名。旧版安装包与其校验记录保留。
+- 最后保留安装后的 V1.0.0 运行。以下 0.1.0 记录是此前的安装/卸载验收历史；V1.0.0 本轮验证的是不卸载的覆盖升级。
+
 ## 自动化覆盖
 
 - TypeScript：逾期/今天/明天/下周/无日期排序，日期任务当天不逾期，同截止时间重要性及创建时间排序，已完成/取消排除逾期，本地日期显示。
@@ -32,7 +45,7 @@ npm run tauri build
 
 ## 本次执行结果
 
-日期：2026-10-17，真实 Windows x64 环境。
+日期：2026-10-17，真实 Windows 11 家庭版中文版 x64，版本 10.0.26300。
 
 | 检查 | 实际结果 |
 | --- | --- |
@@ -43,7 +56,22 @@ npm run tauri build
 | npm run test:rust | 14/14 通过，真实 SQLite 临时文件与在线备份；含跨时区编辑保持原截止瞬间的回归测试 |
 | cargo fmt -- --check | 通过 |
 | npm audit / npm audit --omit=dev | 均为 0 个漏洞（仅 npm 依赖审计） |
-| npm run tauri build | 最终跨时区保护改动构建成功；发布 EXE 与 1.95 MiB NSIS 安装器均已生成 |
+| npm run tauri build | 本轮重新完整执行成功（12:41）；发布 EXE 与 1.95 MiB NSIS 安装器均已生成 |
+
+### Windows 11 正式安装版验收已通过
+
+- 从资源管理器打开简体中文 NSIS 安装向导并完成安装；实际安装的程序为 `C:\Users\hp\AppData\Local\DayFlow\dayflow.exe`，不是工作区中的调试程序。
+- 安装器创建开始菜单和桌面快捷方式；已从桌面快捷方式通过资源管理器实际启动。Windows“程序和功能”中显示 DayFlow，版本 0.1.0，发布者 dayflow，大小 5.07 MB。
+- 正式安装版同时显示主窗口和小组件，页面加载嵌入的 `http://tauri.localhost/` 资源，不需要 Vite 开发服务器。
+- 在小组件输入并保存“安装验收：关闭重启后保留任务”；关闭主窗口后小组件继续运行，点击展开可重新打开主窗口。
+- 使用“退出应用”彻底退出，检查 DayFlow 进程数为 0；从桌面快捷方式重新启动后，小组件仍显示此前保存的任务。
+- 小组件完成该任务后，主窗口同步显示完成数量为 1；保存独立的安装验收日志后，日报正确包含 1 个完成任务、1 次完成事件和 1 条工作日志。
+- 正常退出后，通过资源管理器环境执行正式 NSIS 卸载器的 `/S` 静默卸载。检查程序 EXE、卸载器、开始菜单和桌面快捷方式均已移除，DayFlow 进程数为 0；默认保留数据库。
+- 再次通过资源管理器环境静默安装同一个 NSIS 包，从桌面快捷方式启动后，原任务的完成状态和独立工作日志均恢复。再次在 Windows“程序和功能”中确认可见的卸载项。
+- 最后保留已重新安装并启动的应用。正式数据库中的任务和日志明确标注“安装验收”，均为实际测试输入；安装包不包含这些数据。此前 `.tools/native-test-data` 中的开发验收和用户手动输入记录也完整保留。
+- 安装后 EXE 与发布 EXE 仅有 Tauri 官方包类型标记 `__TAURI_BUNDLE_TYPE_VAR_UNK` → `__TAURI_BUNDLE_TYPE_VAR_NSS` 的 3 字节差异；按官方 NSIS 标记规范归一化后逐字节一致。安装 EXE SHA256 为 `528fef915e93de614790ac71e2db82f581a518b0e6d03c43dadbb5a86c26abd6`。
+
+安装和卸载的机器检查结果保存在 `.tools/nsis-install-result.json`、`.tools/nsis-uninstall-result.json`、`.tools/nsis-binary-verification.json`。首次从 Codex 子进程直接安装受到 MSIX 路径重定向影响；最终正式验收通过资源管理器启动，窗口进程路径已确认不在 Codex 的 LocalCache 中。
 
 ### 真实窗口验收已通过
 
@@ -65,7 +93,7 @@ npm run tauri build
 
 验收 JSON：`C:\Users\hp\Desktop\DayFlow\.tools\native-test-data\exports\dayflow-20261017-122728-70927337.json`。
 
-最终发布文件（2026-10-17 12:30，Asia/Shanghai）：
+最终发布文件（2026-10-17 12:41，Asia/Shanghai）：
 
 ```text
 C:\Users\hp\Desktop\DayFlow\src-tauri\target\release\dayflow.exe
@@ -73,9 +101,9 @@ C:\Users\hp\Desktop\DayFlow\src-tauri\target\release\bundle\nsis\DayFlow_0.1.0_x
 C:\Users\hp\Desktop\DayFlow\src-tauri\target\release\bundle\nsis\SHA256SUMS.txt
 ```
 
-安装器未签名；SHA256SUMS.txt 记录本次最终安装包的校验值。最终 npm build 已执行严格类型检查；Rust 最后修复后再次执行 cargo check 与 14 项测试，均通过。
+安装器未签名；SHA256SUMS.txt 记录本次最终安装包的校验值：`c0da973bb1614dc0e9133f116792343c0cbce44ac6c2e0d0bd94f9c5ffb76d5e`。最终 npm build 已执行严格类型检查；Rust 最后修复后再次执行 cargo check 与 14 项测试，均通过。本轮前端测试再次执行，6/6 通过。
 
-当前运行的验收程序使用独立目录 `C:\Users\hp\Desktop\DayFlow\.tools\native-test-data`；其中含验收输入及用户手动输入的日志，予以保留。正式安装版使用正常应用数据目录。需要迁移本次记录时可在设置中备份并恢复到正式安装版。
+早先开发验收使用独立目录 `C:\Users\hp\Desktop\DayFlow\.tools\native-test-data`；其中含验收输入及用户手动输入的日志，予以保留。当前运行的正式安装版使用正常应用数据目录。需要迁移开发验收记录时可在设置中备份并恢复到正式安装版。
 
 ### 原生桌面模式的真实结果
 
@@ -83,7 +111,7 @@ C:\Users\hp\Desktop\DayFlow\src-tauri\target\release\bundle\nsis\SHA256SUMS.txt
 
 ### 尚未执行的系统验收
 
-- NSIS 实际安装/卸载与干净 Windows 10/11 设备验收；安装器未代码签名。
+- 其他干净 Windows 10/11 设备验收；本机 Windows 11 安装/卸载已执行，安装器未代码签名。
 - 重启 Windows 后的开机启动投递与正式安装后的系统通知、休眠/勿扰实机矩阵。
 - 托盘菜单的逐项 UI 点击、拖动/缩放和窗口位置的多显示器矩阵。
 
@@ -96,3 +124,4 @@ C:\Users\hp\Desktop\DayFlow\src-tauri\target\release\bundle\nsis\SHA256SUMS.txt
 - GitHub NSIS 下载超时，使用同一官方发布的 GitHub API 下载 NSIS 与辅助 DLL，核对发布 SHA256 及 Tauri 官方 SHA1，再缓存到 `src-tauri/target/.tauri/`；未关闭哈希检查。
 - 开发服务器起初位于隔离网络中，原生 WebView 无法连接；重启服务到正常 Windows 环境后成功。最终离线验收完全关闭了该服务。
 - 在运行 EXE 时重建同一路径被 Windows 文件锁拒绝；正常退出后构建成功。调试增量缓存曾提示硬链接失败并改为复制，不影响测试结果。
+- 本轮隔离环境中的 makensis.exe 启动报系统 DLL 重定位错误（623）；在正常 Windows 环境重新执行完整 `npm run tauri build` 后成功，未更改官方 NSIS 工具或关闭校验。

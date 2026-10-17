@@ -11,6 +11,7 @@ import {
   Pin,
 } from "lucide-react";
 import { useData } from "../hooks/useData";
+import { APP_VERSION_LABEL } from "../services/appInfo";
 import {
   autostart,
   dataAction,
@@ -366,7 +367,7 @@ export function SettingsView() {
           </div>
         )}
       </section>
-      <p className="about">DayFlow 0.1.0 · 数据留在本机，离线也能专注。</p>
+      <p className="about">DayFlow {APP_VERSION_LABEL} · 数据留在本机，离线也能专注。</p>
     </div>
   );
 }

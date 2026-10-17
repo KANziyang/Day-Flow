@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useClock, useData } from "./hooks/useData";
 import { native, windowAction } from "./services/api";
+import { APP_VERSION_LABEL } from "./services/appInfo";
 import {
   isActive,
   isOverdue,
@@ -222,6 +223,9 @@ export function App() {
           <div className="local-indicator">
             <i />
             本地存储 · 离线可用
+          </div>
+          <div className="app-version" aria-label={`当前版本 ${APP_VERSION_LABEL}`}>
+            {APP_VERSION_LABEL}
           </div>
           <button
             className="exit-button"
