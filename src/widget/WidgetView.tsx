@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Maximize2, CheckCheck, Leaf, Minus } from "lucide-react";
 import { useClock, useData } from "../hooks/useData";
@@ -13,6 +14,7 @@ import { QuickAdd } from "../components/QuickAdd";
 export function WidgetView() {
   const { data, loading, error, run, refresh, notice, dismiss } = useData(),
     now = useClock();
+  const [expanded, setExpanded] = useState(false);
   const today = localDate(now),
     active = data ? sortTasks(data.tasks.filter(isActive), now) : [];
   const done =
@@ -114,33 +116,39 @@ export function WidgetView() {
               <div className="widget-section-label">
                 待办事项 <span>{active.length}</span>
               </div>
-              {active.length ? (
-                active.slice(0, data.settings.widget_count).map((t) => (
-                  <TaskItem
-                    key={t.id}
-                    task={t}
-                    compact
-                    now={now}
-                    onSelect={() => {
-                      void run(() => windowAction("main", t.id));
-                    }}
-                  />
-                ))
-              ) : (
-                <div className="widget-empty">
-                  <CheckCheck size={26} />
-                  <p>暂时没有待办事项</p>
-                  <small>从一件小事开始吧。</small>
-                </div>
-              )}
+              <div id="widget-pending-tasks">
+                {active.length ? (
+                  active
+                    .slice(0, expanded ? undefined : data.settings.widget_count)
+                    .map((t) => (
+                      <TaskItem
+                        key={t.id}
+                        task={t}
+                        compact
+                        now={now}
+                        onSelect={() => {
+                          void run(() => windowAction("main", t.id));
+                        }}
+                      />
+                    ))
+                ) : (
+                  <div className="widget-empty">
+                    <CheckCheck size={26} />
+                    <p>暂时没有待办事项</p>
+                    <small>从一件小事开始吧。</small>
+                  </div>
+                )}
+              </div>
               {active.length > data.settings.widget_count && (
                 <button
                   className="widget-more"
-                  onClick={() => {
-                    void run(() => windowAction("main"));
-                  }}
+                  aria-expanded={expanded}
+                  aria-controls="widget-pending-tasks"
+                  onClick={() => setExpanded((value) => !value)}
                 >
-                  查看其余 {active.length - data.settings.widget_count} 项
+                  {expanded
+                    ? "收起"
+                    : `查看其余 ${active.length - data.settings.widget_count} 项`}
                 </button>
               )}
               {data.settings.show_completed && done.length > 0 && (

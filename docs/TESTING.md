@@ -2,6 +2,21 @@
 
 本文件随实际验证更新，未执行的项目不能标为通过。
 
+## V1.0.2 小窗口“查看其余任务”修复（2026-10-17）
+
+- 原按钮只发送打开主窗口命令，既不展开小窗口任务，也不切换主窗口页面；当主窗口已显示时看起来无响应。按用户确认改为小窗口本地展开/收起，默认仍按设置展示 3/5/8 条，保持固定窗口尺寸及列表滚动。无后端或数据库变更。
+- `npm test` 19/19、严格 TypeScript/Vite 构建及差异空白检查通过。使用独立应用标识 `com.dayflow.widgetmorevalidation` 和 `.tools/widget-more-live-test` 数据库执行 8 组真实窗口场景，通过 WebView2 输入事件点击实际按钮，验证 9 项任务默认显示 5 项、展开其余 4 项和收起，3/8 条设置、滚动到底部与固定底部输入区、完成/取消/删除排除、完成同步、详情定位、隐藏恢复及数量阈值变化。
+- Win32 属性检查确认展开前后位置、尺寸、置顶和独立窗口属性不变，主窗口仍停留在原页面；测试实例通过应用退出命令关闭并确认进程结束。脚本和结果分别为 `.tools/widget-more-cdp.mjs`、`.tools/widget-more-live-result.json`；`.tools/widget-more-expanded.png` 已检查。
+- 20:48 使用默认正式应用配置执行 `node scripts/tauri.mjs build`，发布构建及 NSIS 打包成功，替换此前同名 V1.0.2 安装包。新版安装包 2,038,687 字节，SHA256：`23f35c4b5196596af133037e7ac044f895476cc5cc782eb65108ac09571bb237`；发布程序 5,225,984 字节，SHA256：`6d226d3a145084fc862277d5058d297c803d815dd76db4b345af821a66a309c8`。产品和文件版本均为 `1.0.2`，更新说明、产物记录与 `SHA256SUMS.txt` 已同步；未执行本版安装、覆盖升级或 Windows 10 设备复测。
+
+## V1.0.2 安装包生成（2026-10-17 20:38）
+
+- npm、Tauri、Cargo 及对应锁文件统一为 `1.0.2`，默认正式应用标识保持 `com.dayflow.desktop`。版本一致性、固定置顶与 NSIS 当前用户安装配置检查通过；主窗口和设置页从同一 Tauri 配置读取版本。
+- 版本更新后 `npm test` 19/19、Rust 格式检查及差异空白检查通过；业务代码与此前通过 Rust 29 项测试及 7 组真实窗口场景的版本一致。完整发布流水线执行严格 TypeScript/Vite、Rust 发布优化构建及 NSIS 打包成功。
+- 首次沙箱构建已完成发布程序编译，但 NSIS 启动报系统 DLL 重定位错误 623；在正常 Windows 环境重新执行 `node scripts/tauri.mjs build` 后完整成功，未修改打包工具或关闭校验。
+- 安装包 `src-tauri/target/release/bundle/nsis/DayFlow_1.0.2_x64-setup.exe`，2,038,439 字节，SHA256：`e5d38999e67cd13abf54ef919ca21e75a53bf23fbf19f037a7e6b5880a497f1c`。发布程序为 5,225,984 字节，SHA256：`c9fa0fd0fb1c1c8885496b6b0501b6352a9cbc3ed68b537db35491cfe459e234`。两者的 PE 产品版本和文件版本均验证为 `1.0.2`；产物记录保存在 `.tools/release-v1.0.2-artifacts.json`，输出目录 `SHA256SUMS.txt` 已加入新版安装包校验值。
+- 新增 `docs/releases/v1.0.2.md` 并更新 README。本轮未安装安装包、未执行覆盖升级或 Windows 10 问题设备复测；下文“尚未重新生成安装包”为此前实现验收时的状态。
+
 ## V1.0.2 移除桌面模式，固定置顶小组件（2026-10-17）
 
 - 小组件由 Tauri 以 `alwaysOnTop: true` 创建为独立窗口；移除 Explorer 挂载模块、模式 IPC、模式状态以及小组件、设置页和托盘的切换入口。任务输入、完成、展开、隐藏及窗口几何信息保存继续保留。
