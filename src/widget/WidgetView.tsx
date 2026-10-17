@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Maximize2, CheckCheck, Leaf, Minus } from "lucide-react";
+import { Maximize2, CheckCheck, Leaf, Minus, Minimize2 } from "lucide-react";
 import { useClock, useData } from "../hooks/useData";
 import { native, windowAction } from "../services/api";
 import {
@@ -69,6 +69,14 @@ export function WidgetView() {
           }}
         >
           <Maximize2 size={15} />
+        </button>
+        <button
+          className="icon-button"
+          aria-label="收起为悬浮球"
+          title="收起为悬浮球"
+          onClick={() => { void run(() => windowAction("collapse_widget")); }}
+        >
+          <Minimize2 size={15} />
         </button>
         <button
           className="icon-button widget-hide"

@@ -143,6 +143,7 @@ pub struct Snapshot {
     pub categories: Vec<Category>,
     pub work_records: Vec<WorkRecord>,
     pub settings: Settings,
+    pub widget_presentation: crate::windows::Presentation,
     pub data_dir: String,
 }
 

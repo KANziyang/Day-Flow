@@ -35,6 +35,20 @@
         "alwaysOnTop": true,
         "visible": false,
         "transparent": true
+      },
+      {
+        "label": "ball",
+        "title": "DayFlow 悬浮球",
+        "url": "index.html?window=ball",
+        "width": 56,
+        "height": 56,
+        "decorations": false,
+        "resizable": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "transparent": true,
+        "shadow": false
       }
     ],
     "security": {

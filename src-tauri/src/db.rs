@@ -154,6 +154,7 @@ pub fn snapshot(conn: &Connection, dir: &Path) -> Result<Snapshot> {
         categories: crate::repository::categories(conn)?,
         work_records: crate::repository::work_records(conn)?,
         settings: settings(conn)?,
+        widget_presentation: crate::windows::saved_presentation(conn)?,
         data_dir: dir.to_string_lossy().into_owned(),
     })
 }
@@ -231,6 +232,7 @@ fn validate_backup(conn: &Connection, dir: &Path) -> Result<()> {
         }
     }
     validate_settings(&data.settings)?;
+    crate::windows::validate_saved_state(conn)?;
     for category in &data.categories {
         if category.name.trim().is_empty()
             || category.name.chars().count() > 30

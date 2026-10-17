@@ -4,9 +4,9 @@
 
 React → 类型化 Service → Tauri IPC → Rust Repository → 单例 SQLite Connection。
 
-两个 WebView 共享 Rust 管理的一个 `Database`。连接由 Mutex 串行化，WAL、外键、5 秒 busy timeout 与 FULL 同步模式开启。数据库存放在 Tauri 的 `app_data_dir/com.dayflow.desktop` 对应目录（Windows 通常为 `%APPDATA%\com.dayflow.desktop\dayflow.db`，以设置页显示为准）。
+主窗口、小组件和悬浮球三个 WebView 共享 Rust 管理的一个 `Database`。连接由 Mutex 串行化，WAL、外键、5 秒 busy timeout 与 FULL 同步模式开启。数据库存放在 Tauri 的 `app_data_dir/com.dayflow.desktop` 对应目录（Windows 通常为 `%APPDATA%\com.dayflow.desktop\dayflow.db`，以设置页显示为准）。
 
-写入提交成功后广播 `data-changed`，两窗口刷新快照；焦点恢复时再次读取。无逐秒数据库轮询。30 秒的本地时钟更新只重新计算 UI 到期状态。后台提醒每 30 秒检查一次。
+写入提交成功后广播 `data-changed`，各窗口刷新快照；焦点恢复时再次读取。快照中的 `widget_presentation` 返回 `expanded | ball | hidden`，原生显示状态切换成功后同样广播刷新，使设置页开关与外部操作同步。无逐秒数据库轮询。30 秒的本地时钟更新只重新计算 UI 到期状态。后台提醒每 30 秒检查一次。
 
 ## 持久化与历史
 
@@ -22,9 +22,11 @@ SQLite 在线 Backup API 用于手动与每日启动备份。恢复流程：只�
 
 ## 原生窗口
 
-`windows/mod.rs` 通过 Tauri 显示、隐藏窗口及恢复物理位置，恢复时检查当前监视器并修正不可见位置。小组件在 `tauri.conf.json` 中固定 `alwaysOnTop: true`，由框架创建为独立置顶窗口；显示、隐藏、备份恢复及重启均不切换窗口模式。
+`windows/mod.rs` 在主线程统一切换 `expanded | ball | hidden`，小组件与悬浮球最多显示一个。两窗口都由 Tauri 创建为独立置顶窗口，悬浮球固定为 56×56 逻辑像素。展开窗口与球的位置使用显示器工作区及物理坐标计算，并在跨 DPI 显示器切换时换算尺寸；小组件首次显示后再应用缓存的目标客户区尺寸，避免隐藏窗口的边框测量影响高度。
 
-桌面宿主模块及其 Win32 依赖、模式 IPC、运行时模式状态、Explorer 宿主检查和退出解除挂载逻辑均已移除。退出时保存窗口几何信息，由 Tauri 完成窗口销毁。
+展示状态写入现有设置表的 `widget_presentation`，小窗口几何信息与 `window_ball` 中的球位置分别保存，数据库结构保持版本 3。设置页的两个开关基于快照推导，状态变化后刷新；原生切换或状态保存失败时恢复原先可见窗口。恢复数据库时暂停几何信息采集、清理旧缓存并重新应用恢复后的窗口状态。
+
+旧桌面宿主模块及其 Win32 依赖、Explorer 宿主检查和退出解除挂载逻辑已移除。退出时保存窗口几何信息，由 Tauri 完成窗口销毁。
 
 ## 前端
 

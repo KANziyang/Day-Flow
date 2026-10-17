@@ -79,6 +79,11 @@ export function SettingsView() {
       "设置已保存",
     ).finally(() => setBusy(false));
   };
+  const changeWidget = (action: "widget" | "show_ball" | "hide_widget") => {
+    if (busy) return;
+    setBusy(true);
+    void run(() => windowAction(action)).finally(() => setBusy(false));
+  };
   const dataOp = (action: string) => {
     if (busy) return;
     setBusy(true);
@@ -153,14 +158,20 @@ export function SettingsView() {
           disabled={busy}
           change={(v) => save("show_completed", v)}
         />
-        <button
-          className="text-button"
-          onClick={() => {
-            void run(() => windowAction("widget"));
-          }}
-        >
-          显示小组件
-        </button>
+        <Toggle
+          label="显示小组件"
+          hint="打开后展开任务小窗口"
+          checked={data!.widget_presentation === "expanded"}
+          disabled={busy}
+          change={(visible) => changeWidget(visible ? "widget" : "hide_widget")}
+        />
+        <Toggle
+          label="显示悬浮球"
+          hint="打开后收起为悬浮球"
+          checked={data!.widget_presentation === "ball"}
+          disabled={busy}
+          change={(visible) => changeWidget(visible ? "show_ball" : "hide_widget")}
+        />
       </section>
       <section className="surface setting-section">
         <h2>外观与使用</h2>
@@ -178,7 +189,7 @@ export function SettingsView() {
         </label>
         <Toggle
           label="开机启动"
-          hint={autoError || "登录 Windows 后仅显示小组件"}
+          hint={autoError || "登录 Windows 后恢复小组件上次的展开、悬浮球或隐藏状态"}
           checked={auto ?? false}
           disabled={busy || auto === null}
           change={(v) => {

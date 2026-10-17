@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "desktop",
-  "description": "仅允许 DayFlow 本地双窗口使用必要窗口接口",
-  "windows": ["main", "widget"],
+  "description": "仅允许 DayFlow 本地窗口使用必要窗口接口",
+  "windows": ["main", "widget", "ball"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

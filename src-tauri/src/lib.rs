@@ -127,10 +127,19 @@ async fn window_action(
                 on_main(&app, move |a| windows::show_main(&a, task_id))?;
                 Ok(Value::Null)
             }
-            "widget" | "hide_widget" => {
+            "widget" | "collapse_widget" | "show_ball" | "hide_widget" => {
                 on_main(&app, move |a| {
-                    windows::set_widget_visible(&a, action == "widget")
+                    let next = match action.as_str() {
+                        "widget" => windows::Presentation::Expanded,
+                        "collapse_widget" | "show_ball" => windows::Presentation::Ball,
+                        _ => windows::Presentation::Hidden,
+                    };
+                    windows::set_presentation(&a, next)
                 })?;
+                Ok(Value::Null)
+            }
+            "ball_menu" => {
+                on_main(&app, |a| windows::ball_menu(&a))?;
                 Ok(Value::Null)
             }
             "quit" => {
@@ -147,7 +156,13 @@ async fn data_action(app: tauri::AppHandle, action: String) -> std::result::Resu
     let result = (|| -> Result<String> {
         let state = app.state::<Database>();
         match action.as_str() {
-            "backup" => Ok(state.backup("manual")?.to_string_lossy().into()),
+            "backup" => on_main(&app, |a| {
+                windows::flush_geometry(&a, true)?;
+                Ok(a.state::<Database>()
+                    .backup("manual")?
+                    .to_string_lossy()
+                    .into())
+            }),
             "export" => Ok(state.export()?.to_string_lossy().into()),
             "open_dir" => {
                 std::process::Command::new("explorer.exe")
@@ -170,7 +185,7 @@ async fn data_action(app: tauri::AppHandle, action: String) -> std::result::Resu
                 if !confirmed {
                     return Ok("已取消恢复".into());
                 }
-                let safety = state.restore(&path)?;
+                let safety = on_main(&app, move |a| windows::restore_database(&a, &path))?;
                 app.emit("data-changed", ())?;
                 Ok(format!("恢复完成；原数据备份：{}", safety.display()))
             }
@@ -202,9 +217,11 @@ fn tray(app: &tauri::App) -> Result<()> {
         tray::TrayIconBuilder,
     };
     let main = MenuItem::with_id(app, "main", "打开 DayFlow", true, None::<&str>)?;
-    let widget = MenuItem::with_id(app, "widget", "显示小组件", true, None::<&str>)?;
+    let widget = MenuItem::with_id(app, "widget", "显示小窗口", true, None::<&str>)?;
+    let ball = MenuItem::with_id(app, "show_ball", "显示悬浮球", true, None::<&str>)?;
+    let hide = MenuItem::with_id(app, "hide_widget", "隐藏小组件", true, None::<&str>)?;
     let exit = MenuItem::with_id(app, "exit", "退出 DayFlow", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&main, &widget, &exit])?;
+    let menu = Menu::with_items(app, &[&main, &widget, &ball, &hide, &exit])?;
     TrayIconBuilder::new()
         .icon(
             app.default_window_icon()
@@ -214,20 +231,6 @@ fn tray(app: &tauri::App) -> Result<()> {
         .tooltip("DayFlow · 让每一天有迹可循")
         .menu(&menu)
         .show_menu_on_left_click(true)
-        .on_menu_event(|app, event| {
-            let result = (|| -> Result<()> {
-                match event.id().as_ref() {
-                    "main" => windows::show_main(app, None)?,
-                    "widget" => windows::set_widget_visible(app, true)?,
-                    "exit" => app.exit(0),
-                    _ => {}
-                }
-                Ok(())
-            })();
-            if let Err(e) = result {
-                let _ = app.emit("app-error", e.to_string());
-            }
-        })
         .build(app)?;
     Ok(())
 }
@@ -307,6 +310,18 @@ fn background(app: tauri::AppHandle) {
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(windows::WindowRuntime::default())
+        .on_menu_event(|app, event| {
+            let result = match event.id().as_ref() {
+                "main" => windows::show_main(app, None),
+                "widget" => windows::set_presentation(app, windows::Presentation::Expanded),
+                "show_ball" => windows::set_presentation(app, windows::Presentation::Ball),
+                "hide_widget" => windows::set_presentation(app, windows::Presentation::Hidden),
+                "exit" => { app.exit(0); Ok(()) },
+                _ => Ok(()),
+            };
+            if let Err(e) = result { let _ = app.emit("app-error", e.to_string()); }
+        })
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             let _ = windows::show_main(app, None);
         }))
@@ -344,11 +359,7 @@ pub fn run() {
             }
             app.manage(database);
             tray(app)?;
-            windows::restore_geometry(app.handle(), "main")?;
-            windows::set_widget_visible(app.handle(), true)?;
-            // The frameless window's shadow bounds settle when shown. Restore
-            // its client size afterwards so a hidden caption is not counted.
-            windows::restore_geometry(app.handle(), "widget")?;
+            windows::restore_session(app.handle())?;
             if !std::env::args().any(|a| a == "--autostart") {
                 windows::show_main(app.handle(), None)?;
             }
@@ -373,7 +384,7 @@ pub fn run() {
                     }
                 } else {
                     api.prevent_close();
-                    if let Err(e) = windows::set_widget_visible(window.app_handle(), false) {
+                    if let Err(e) = windows::set_presentation(window.app_handle(), windows::Presentation::Hidden) {
                         let _ = window.emit("app-error", e.to_string());
                     }
                 }

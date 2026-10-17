@@ -32,7 +32,7 @@ export const api = {
     },
   ) => request<WorkLog>("save_log", input),
 };
-export function windowAction(action: "main" | "widget" | "hide_widget" | "quit", taskId?: string) {
+export function windowAction(action: "main" | "widget" | "collapse_widget" | "show_ball" | "hide_widget" | "ball_menu" | "quit", taskId?: string) {
   return invoke<void>("window_action", {
     action,
     taskId: taskId ?? null,

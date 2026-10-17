@@ -82,6 +82,7 @@ export interface Snapshot {
   categories: Category[];
   work_records: WorkRecord[];
   settings: Settings;
+  widget_presentation: "expanded" | "ball" | "hidden";
   data_dir: string;
 }
 export interface Report {
