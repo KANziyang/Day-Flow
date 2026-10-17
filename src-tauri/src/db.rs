@@ -14,7 +14,13 @@ pub struct Database {
 impl Database {
     pub fn open(dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(dir)?;
-        let mut conn = Connection::open(dir.join("dayflow.db"))?;
+        let database_path = dir.join("dayflow.db");
+        // A new profile gets the tutorial; data restoration cannot replay it.
+        let marker = dir.join("onboarding-pending");
+        if !database_path.try_exists()? && !marker.try_exists()? {
+            std::fs::File::create_new(&marker).context("无法初始化新手教程状态")?;
+        }
+        let mut conn = Connection::open(database_path)?;
         conn.busy_timeout(Duration::from_secs(5))?;
         conn.execute_batch(
             "PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;",
@@ -117,6 +123,18 @@ impl Database {
         Ok(path)
     }
 }
+pub fn onboarding_required(dir: &Path) -> Result<bool> {
+    dir.join("onboarding-pending")
+        .try_exists()
+        .context("无法读取新手教程状态")
+}
+pub fn finish_onboarding(dir: &Path) -> Result<()> {
+    let marker = dir.join("onboarding-pending");
+    if marker.try_exists()? {
+        std::fs::remove_file(marker).context("无法保存新手教程状态，请重试")?;
+    }
+    Ok(())
+}
 pub fn settings(conn: &Connection) -> Result<Settings> {
     use rusqlite::OptionalExtension;
     let value: Option<String> = conn
@@ -155,6 +173,7 @@ pub fn snapshot(conn: &Connection, dir: &Path) -> Result<Snapshot> {
         work_records: crate::repository::work_records(conn)?,
         settings: settings(conn)?,
         widget_presentation: crate::windows::saved_presentation(conn)?,
+        onboarding_required: onboarding_required(dir)?,
         data_dir: dir.to_string_lossy().into_owned(),
     })
 }

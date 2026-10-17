@@ -2,6 +2,20 @@
 
 本文件随实际验证更新，未执行的项目不能标为通过。
 
+## V1.0.3 发布构建与安装包（2026-10-17 21:50）
+
+- npm、Tauri、Cargo 及对应锁文件统一为 `1.0.3`，正式应用标识保持 `com.dayflow.desktop`。README、需求、架构、交互、更新说明已同步悬浮球、两个互斥显示开关和首次使用教程；4 个 Markdown 本地链接均有效。
+- 版本更新后前端 `npm test` 20/20、Rust `npm run test:rust` 36/36、Rust 格式检查、版本一致性与差异空白检查通过。21:49 使用默认正式配置执行 `node scripts/tauri.mjs build`，完整通过严格 TypeScript/Vite、Rust 发布优化构建与 NSIS 打包。
+- 安装包 `src-tauri/target/release/bundle/nsis/DayFlow_1.0.3_x64-setup.exe`：2,055,443 字节，SHA256：`55e0cb6ef3d191eac7603c740f72c42e649c8c04d370f7423b73abb8819e4968`。发布程序 `src-tauri/target/release/dayflow.exe`：5,279,232 字节，SHA256：`ba6a294c8bf7929714ebb8264a747cf25f21aadb1a4acec36f654f5e6ccf8e73`。两者 PE 产品版本和文件版本均为 `1.0.3`。
+- 已生成 `.tools/release-v1.0.3-artifacts.json` 产物记录，安装包目录的 `SHA256SUMS.txt` 已加入本版。详细功能验证见下方各节；本轮未安装、执行覆盖升级或新增实机交互验收。
+
+## V1.0.3 首次使用教程（2026-10-17）
+
+- 新用户首次创建数据库后显示 8 步教程，支持上一步、下一步、跳过及 Esc 跳过；完成或跳过后不重复。已有用户升级不弹出，教程不插入示例任务或工作记录。教程显示时暂缓展示置顶小组件，结束后恢复。
+- 前端 `npm test` 20/20、严格 TypeScript/Vite 构建、Rust `npm run test:rust` 36/36 通过。新增 4 项 Rust 测试覆盖新用户与未结束教程的重启、跳过/完成幂等性、空数据库及版本 1/2/3 旧用户识别、备份恢复不改变教程确认状态，以及保存失败仍保持待确认状态。
+- 使用独立应用标识 `com.dayflow.onboardingvalidation` 和 `.tools/onboarding-live-*` 测试目录，经本机 WebView2 CDP 完成 10 组真实应用场景：首次模态与聚焦/无示例数据/无小组件遮挡；Tab 焦点约束及后台快捷键隔离；8 步内容、前后导航和每步可跳过；800×560 视口中正文滚动且导航可见；文件写入失败提示、重试和完成后恢复小组件；完成后重启不重复；中途跳过后以开机启动参数重启不重复；Esc 跳过；未确认直接退出后仍显示；已有 13 项任务的旧用户启动不弹出且任务保留。所有测试实例通过应用自身退出命令关闭。
+- 结果为 `.tools/onboarding-live-result.json`；欢迎页、小组件介绍及最小视口截图分别为 `.tools/onboarding-welcome.png`、`.tools/onboarding-widget.png`、`.tools/onboarding-small.png`，均已检查。此功能验证阶段未生成或安装发布安装包；后续打包结果见上方发布构建记录。
+
 ## V1.0.3 悬浮球与两个显示开关（2026-10-17）
 
 - 小组件支持收起为独立悬浮球、点击展开、隐藏恢复和展示状态持久化。设置页使用“显示小组件”“显示悬浮球”两个互斥开关，状态由 Rust 快照提供，窗口切换成功后广播同步。

@@ -83,6 +83,7 @@ export interface Snapshot {
   work_records: WorkRecord[];
   settings: Settings;
   widget_presentation: "expanded" | "ball" | "hidden";
+  onboarding_required: boolean;
   data_dir: string;
 }
 export interface Report {

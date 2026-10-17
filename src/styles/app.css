@@ -1201,6 +1201,58 @@ i {
     transform: scale(1.2);
   }
 }
+.onboarding-dialog {
+  width: min(860px, calc(100vw - 40px));
+  max-height: calc(100dvh - 40px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 24px 80px #0003;
+  overflow: hidden;
+}
+.onboarding-dialog[open] { display: flex; flex-direction: column; }
+.onboarding-dialog::backdrop { background: #152c3675; backdrop-filter: blur(3px); }
+.onboarding-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 26px; flex-shrink: 0; }
+.onboarding-header > span:first-child { display: flex; align-items: center; gap: 9px; font-size: 17px; font-weight: 700; color: var(--accent); }
+.onboarding-header small { font-size: 11px; font-weight: 400; color: var(--muted); margin-left: 8px; }
+.onboarding-counter { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.onboarding-progress { height: 3px; background: var(--line); flex-shrink: 0; }
+.onboarding-progress > span { display: block; height: 100%; background: var(--accent); }
+.onboarding-layout { display: grid; grid-template-columns: 185px minmax(0, 1fr); min-height: 0; overflow: hidden; }
+.onboarding-outline { background: var(--sidebar); padding: 26px 15px; border-right: 1px solid var(--line); }
+.onboarding-outline > p { color: var(--muted); font-size: 11px; margin: 0 10px 18px; }
+.onboarding-outline ol { padding: 0; margin: 0; list-style: none; display: grid; gap: 6px; }
+.onboarding-outline li { display: flex; align-items: center; gap: 9px; padding: 10px; border-radius: 8px; color: var(--muted); font-size: 11px; }
+.onboarding-outline li > span { display: grid; place-items: center; width: 19px; height: 19px; border: 1px solid var(--line); border-radius: 50%; font-size: 9px; }
+.onboarding-outline li[aria-current="step"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.onboarding-outline li[aria-current="step"] > span { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+.onboarding-outline li.is-read { color: var(--accent); }
+.onboarding-content { padding: 26px 32px 24px; overflow-y: auto; min-height: 0; }
+.onboarding-step-icon { display: inline-flex; padding: 10px; background: var(--accent-soft); color: var(--accent); border-radius: 13px; }
+.onboarding-content h1 { font-size: 25px; line-height: 1.4; margin: 16px 0 10px; letter-spacing: -0.5px; }
+.onboarding-content h1:focus { outline: none; }
+.onboarding-description { color: var(--muted); font-size: 12px; line-height: 1.8; margin: 0 0 20px; }
+.onboarding-preview { padding: 14px 16px; border: 1px solid var(--line); border-radius: 11px; background: var(--bg); margin-bottom: 22px; }
+.onboarding-preview-label { display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 600; margin-bottom: 10px; }
+.onboarding-preview-label small { color: var(--muted); font-size: 9px; font-weight: 400; }
+.onboarding-preview > div { display: flex; align-items: center; gap: 9px; padding: 6px 0; font-size: 11px; line-height: 1.7; }
+.onboarding-preview-dot { display: grid; place-items: center; flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; color: var(--accent); background: var(--accent-soft); font-size: 9px; }
+.onboarding-instructions { padding: 0; margin: 0; list-style: none; display: grid; gap: 15px; }
+.onboarding-instructions strong { font-size: 12px; font-weight: 600; }
+.onboarding-instructions p { margin: 5px 0 0; font-size: 11px; line-height: 1.85; color: var(--muted); }
+.onboarding-footer { display: flex; justify-content: space-between; align-items: center; padding: 16px 26px; border-top: 1px solid var(--line); flex-shrink: 0; gap: 15px; }
+.onboarding-footer > div { display: flex; gap: 10px; }
+.onboarding-error { margin: 0; padding: 10px 26px; color: var(--danger); font-size: 12px; flex-shrink: 0; }
+@media (max-width: 850px) {
+  .onboarding-layout { grid-template-columns: 160px minmax(0, 1fr); }
+  .onboarding-content { padding: 20px 24px; }
+  .onboarding-outline { padding: 20px 9px; }
+  .onboarding-outline li { gap: 6px; padding: 8px; }
+  .onboarding-content h1 { font-size: 22px; }
+}
 .is-widget,
 .is-widget body,
 .is-widget #root {

@@ -1,5 +1,7 @@
 mod db;
 mod models;
+#[cfg(test)]
+mod onboarding_tests;
 mod reports;
 mod repository;
 #[cfg(test)]
@@ -38,6 +40,10 @@ async fn dispatch(
         let mut c = state.lock()?;
         let result = match action.as_str() {
             "snapshot" => serde_json::to_value(db::snapshot(&c, &state.dir)?)?,
+            "finish_onboarding" => {
+                db::finish_onboarding(&state.dir)?;
+                Value::Null
+            }
             "save_task" => serde_json::to_value(repository::save_task(
                 &mut c,
                 serde_json::from_value(payload)?,
@@ -96,6 +102,9 @@ async fn dispatch(
             _ => bail!("未知操作"),
         };
         drop(c);
+        if action == "finish_onboarding" {
+            on_main(&app, |a| windows::resume_widget_after_onboarding(&a))?;
+        }
         if !["snapshot", "events", "report"].contains(&action.as_str()) {
             app.emit("data-changed", ())?;
         }

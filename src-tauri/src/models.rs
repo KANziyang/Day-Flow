@@ -144,6 +144,7 @@ pub struct Snapshot {
     pub work_records: Vec<WorkRecord>,
     pub settings: Settings,
     pub widget_presentation: crate::windows::Presentation,
+    pub onboarding_required: bool,
     pub data_dir: String,
 }
 

@@ -419,10 +419,12 @@ pub fn restore_session(app: &tauri::AppHandle) -> Result<()> {
     restore_geometry(app, "ball")?;
     let state = app.state::<db::Database>();
     let next = saved_presentation(&*state.lock()?)?;
-    match next {
-        Presentation::Expanded => show_surface(&widget, false)?,
-        Presentation::Ball => show_surface(&ball, false)?,
-        Presentation::Hidden => {}
+    if !db::onboarding_required(&state.dir)? {
+        match next {
+            Presentation::Expanded => show_surface(&widget, false)?,
+            Presentation::Ball => show_surface(&ball, false)?,
+            Presentation::Hidden => {}
+        }
     }
     let widget_size = Some(intended_size(&widget)?);
     *runtime.0.lock().map_err(|_| anyhow!("窗口状态锁异常"))? = Runtime {
@@ -431,6 +433,15 @@ pub fn restore_session(app: &tauri::AppHandle) -> Result<()> {
         widget_size,
     };
     Ok(())
+}
+pub fn resume_widget_after_onboarding(app: &tauri::AppHandle) -> Result<()> {
+    let next = app
+        .state::<WindowRuntime>()
+        .0
+        .lock()
+        .map_err(|_| anyhow!("窗口状态锁异常"))?
+        .presentation;
+    set_presentation(app, next)
 }
 pub fn restore_database(app: &tauri::AppHandle, path: &Path) -> Result<PathBuf> {
     let runtime = app.state::<WindowRuntime>();

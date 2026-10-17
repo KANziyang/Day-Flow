@@ -19,6 +19,7 @@ export function request<T>(action: string, payload: unknown = {}): Promise<T> {
 }
 export const api = {
   snapshot: () => request<Snapshot>("snapshot"),
+  finishOnboarding: () => request<void>("finish_onboarding"),
   saveTask: (input: TaskInput) => request<Task>("save_task", input),
   status: (id: string, status: Status) =>
     request<Task>("set_status", { id, status }),

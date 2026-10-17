@@ -1,10 +1,12 @@
-# DayFlow V1.0.2
+# DayFlow V1.0.3
 
 Windows 10/11 本地任务、工作记录与周期复盘应用。Tauri 2 + Rust + React 19 + TypeScript + SQLite。核心数据留在本机，运行不依赖网络、账号或 AI 服务，首次启动不写入示例任务。
 
+新用户首次启动会显示可随时跳过的 8 步使用教程，覆盖任务、工作记录、周期复盘、小组件与悬浮球、设置和备份。完成或跳过后不再自动显示；已有用户升级不弹出。
+
 ## 安装与日常启动（Windows 11）
 
-安装包为 `src-tauri/target/release/bundle/nsis/DayFlow_1.0.2_x64-setup.exe`。双击后按简体中文安装向导完成安装；使用 Tauri 2 官方 NSIS 安装器，安装到当前用户，无需每次运行源代码。
+安装包为 `src-tauri/target/release/bundle/nsis/DayFlow_1.0.3_x64-setup.exe`。双击后按简体中文安装向导完成安装；使用 Tauri 2 官方 NSIS 安装器，安装到当前用户，无需每次运行源代码。
 
 默认程序位置为 `%LOCALAPPDATA%\DayFlow\dayflow.exe`。安装后从开始菜单的 **DayFlow** 或桌面快捷方式启动，任务与工作记录保存在独立的应用数据目录。日常使用不需要 Node.js、Rust、命令行或开发服务器。
 
@@ -16,7 +18,7 @@ Windows 10/11 本地任务、工作记录与周期复盘应用。Tauri 2 + Rust 
 
 先在 DayFlow 中选择“退出应用”（仅关闭主窗口默认仍在后台运行），再双击新版安装包。安装器识别已有版本；升级页面可选择“请勿卸载”继续安装到原目录，覆盖程序文件，也可选择“安装前卸载”。任务、工作记录和设置位于独立的数据目录；不要选择卸载器中的“删除应用数据”，即可保留记录。
 
-主窗口左侧底部与设置页底部显示当前版本 `V1.0.2`，由 Tauri 构建配置统一提供。应用暂未接入联网自动检查更新，更新方式是手动安装新版 EXE。
+主窗口左侧底部与设置页底部显示当前版本 `V1.0.3`，由 Tauri 构建配置统一提供。应用暂未接入联网自动检查更新，更新方式是手动安装新版 EXE。
 
 ## 开发启动
 
@@ -45,7 +47,9 @@ npm run tauri dev
 
 主窗口默认 1120×760，小组件 320×420，最小 260×300。小组件顶部拖动、边缘缩放。默认关闭主窗口后隐藏，后台与小组件继续运行；可在设置修改。主窗口左下角和系统托盘提供彻底退出入口。应用使用单实例插件。
 
-小组件固定为始终置顶的独立窗口，通过 Tauri 的 `alwaysOnTop` 创建，显示在其他普通窗口上方。默认展示设置的 3/5/8 条待办，点击“查看其余 N 项”在小窗口内展开全部，点击“收起”恢复默认数量；列表滚动不改变窗口大小。可隐藏并从主窗口或托盘恢复；已移除桌面挂载及模式切换入口。
+小组件与悬浮球均为独立置顶窗口。小组件顶部可收起为 56×56 逻辑像素的悬浮球，点击球展开；球支持拖动，右键可展开或隐藏。设置页通过“显示小组件”“显示悬浮球”两个互斥开关控制展示，全部关闭时完全隐藏；主窗口和托盘可恢复。收起和隐藏保留本次运行中的未提交输入、任务列表展开与滚动状态，展开位置跟随球并保留小窗口尺寸。
+
+默认展示设置的 3/5/8 条待办，点击“查看其余 N 项”在小窗口内展开全部，点击“收起”恢复默认数量；列表滚动不改变窗口大小。正常启动和开机启动都记住展开、悬浮球或隐藏状态，位置和尺寸记忆仍由设置控制。新手教程期间暂缓显示小组件，完成或跳过后恢复。
 
 位置以物理坐标保存，拖动停止后合并写入，正常退出时再次保存；启动检查监视器并纠正不可见位置。位置和大小恢复不改变置顶属性，见 [测试记录](docs/TESTING.md)。
 
@@ -58,6 +62,7 @@ npm run tauri dev
   dayflow.db
   dayflow.db-wal
   dayflow.db-shm
+  onboarding-pending    仅首次教程尚未完成或跳过时存在
   backups\
   exports\
 ```
@@ -98,35 +103,37 @@ NSIS 发布输出约定：
 
 ```text
 src-tauri/target/release/dayflow.exe
-src-tauri/target/release/bundle/nsis/DayFlow_1.0.2_x64-setup.exe
+src-tauri/target/release/bundle/nsis/DayFlow_1.0.3_x64-setup.exe
 ```
 
-安装器使用当前用户安装。V1.0.2 移除桌面模式，仅保留始终置顶的小组件，并修复重启后的尺寸变化；工作记录、四栏报表和新建任务默认今天等功能继续保留。更新说明与安装包校验值见 [v1.0.2.md](docs/releases/v1.0.2.md)，详细验证见 [TESTING.md](docs/TESTING.md)。构建产物未代码签名。
+安装器使用当前用户安装。V1.0.3 增加悬浮球、两个显示开关和首次使用的 8 步教程，保留任务、工作记录、四栏报表与备份恢复。更新说明与安装包校验值见 [v1.0.3.md](docs/releases/v1.0.3.md)，详细验证见 [TESTING.md](docs/TESTING.md)。构建产物未代码签名。
 
 ## 主要模块
 
 ```text
 src/App.tsx                     主窗口与导航
 src/widget/WidgetView.tsx        桌面小组件
-src/components/                 快速添加、任务条目、详情和进展
+src/widget/BallView.tsx          悬浮球与点击/拖动交互
+src/components/                 新手教程、快速添加、任务条目、详情和进展
 src/views/                      工作记录、周期复盘、设置
 src/services/                   类型化 IPC、排序、报告文本
-src/hooks/useData.tsx           双窗口同步与数据状态
+src/hooks/useData.tsx           多窗口同步与数据状态
 src-tauri/src/db.rs             迁移、备份、恢复、导出
 src-tauri/src/repository.rs     任务、事件、手动记录、统一工作记录投影及校验
 src-tauri/src/reports.rs        历史状态与周期汇总
-src-tauri/src/windows/          窗口状态和独立桌面宿主
+src-tauri/src/windows/          原生窗口状态、位置恢复与显示器约束
 src-tauri/src/lib.rs            IPC、托盘、单实例、开机启动、提醒
 src-tauri/migrations/           版本迁移，禁止改写已执行历史
 src-tauri/src/tests.rs          SQLite 和报表自动化测试
 src-tauri/src/work_record_tests.rs 工作记录、历史和旧备份升级回归测试
+src-tauri/src/onboarding_tests.rs 首次使用识别、状态保存及备份恢复回归测试
 tests/                         前端排序和日期测试
 docs/                          需求、架构、交互、验证记录
 ```
 
 ## 当前边界与已知问题
 
-- V1.0.0 的 Windows 11 安装/卸载已实测；V1.0.2 的 Windows 10 问题设备与覆盖升级，以及多显示器热插拔、不同 DPI、通知投递、开机登录启动仍需继续验收。
+- V1.0.0 的 Windows 11 安装/卸载已实测；V1.0.3 的 Windows 10 问题设备、安装包覆盖升级、悬浮球原生拖动和右键、托盘逐项点击、多显示器/混合 DPI、通知投递与真实开机登录启动仍待验收。
 - 通知默认关闭，每个截止时间只提醒一次，支持勿扰；仅日期任务默认 09:00 提醒。显示还受 Windows 权限和专注助手影响，开发与正式安装表现可能不同。
 - 手动记录删除永久生效且需要确认；任务软删除。手动记录被编辑、调整日期或删除后，报告随数据库变化；自动完成记录由任务历史生成，不能直接编辑或删除。
 - 没有云同步、账号、AI 总结、重复任务、自动更新、Markdown 文件导出，不显示这些能力的占位开关。

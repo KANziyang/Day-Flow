@@ -19,7 +19,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useClock, useData } from "./hooks/useData";
-import { native, windowAction } from "./services/api";
+import { api, native, windowAction } from "./services/api";
 import { APP_VERSION_LABEL } from "./services/appInfo";
 import {
   isActive,
@@ -35,6 +35,7 @@ import { WorkLogsView } from "./views/WorkLogsView";
 import { WorkRecordList, WorkRecordStats } from "./components/WorkRecordList";
 import { ReportsView } from "./views/ReportsView";
 import { SettingsView } from "./views/SettingsView";
+import { Onboarding } from "./components/Onboarding";
 import { priorityLabels, statusLabels } from "./types";
 type Page = "today" | "tasks" | "logs" | "reports" | "settings";
 const nav = [
@@ -55,6 +56,8 @@ export function App() {
     [status, setStatus] = useState("active"),
     [priority, setPriority] = useState(""),
     [category, setCategory] = useState("");
+  const [tutorialDismissed, setTutorialDismissed] = useState(false);
+  const tutorialOpen = !!data?.onboarding_required && !tutorialDismissed;
   const canLeave = useCallback(
     () => !dirty || confirm("有尚未保存的修改，确定放弃？"),
     [dirty],
@@ -116,6 +119,7 @@ export function App() {
       }
     };
     const keys = (e: KeyboardEvent) => {
+      if (tutorialOpen) return;
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
         e.preventDefault();
         document.querySelector<HTMLInputElement>("[data-search]")?.focus();
@@ -136,7 +140,7 @@ export function App() {
       window.removeEventListener("beforeunload", unload);
       window.removeEventListener("keydown", keys);
     };
-  }, [dirty, canLeave, selected, creating]);
+  }, [dirty, canLeave, selected, creating, tutorialOpen]);
   const todayRecords = data?.work_records.filter((r) => r.local_date === localDate(now)) ?? [];
   const completedIds = new Set(todayRecords.filter((r) => r.source === "task_completion").map((r) => r.task_id));
   const active = data?.tasks.filter(isActive) ?? [],
@@ -557,6 +561,11 @@ export function App() {
           </span>
         </footer>
       </main>
+      {tutorialOpen && <Onboarding onFinish={async () => {
+        await api.finishOnboarding();
+        setTutorialDismissed(true);
+        void refresh();
+      }} />}
     </div>
   );
 }
